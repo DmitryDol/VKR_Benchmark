@@ -16,3 +16,6 @@ data/annotations/
 
 # Models weights
 weights/*
+
+# Cache
+.ruff_cache/
