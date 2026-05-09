@@ -17,8 +17,8 @@ class BenchmarkResult:
     """Single benchmark run result."""
 
     model_name: str
-    engine_type: str           # "pytorch" | "onnx" | "tensorrt"
-    precision: str             # "fp32" | "fp16" | "bf16" | "int8"
+    engine_type: str  # "pytorch" | "onnx" | "tensorrt"
+    precision: str  # "fp32" | "fp16" | "bf16" | "int8"
 
     # Latency
     latency_preprocess_ms: float
@@ -33,7 +33,7 @@ class BenchmarkResult:
     # Accuracy
     map_50: float
     map_50_95: float
-    accuracy_drop_pct: float   # relative to FP32 baseline
+    accuracy_drop_pct: float  # relative to FP32 baseline
 
     # Resources
     model_size_mb: float
