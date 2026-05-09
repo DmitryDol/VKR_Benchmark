@@ -115,13 +115,53 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| *(populated by roadmapper)* | | |
+| FIX-01 | Phase 1 | Pending |
+| ADPT-01 | Phase 1 | Pending |
+| ADPT-02 | Phase 1 | Pending |
+| ADPT-03 | Phase 1 | Pending |
+| ONNX-01 | Phase 1 | Pending |
+| ONNX-02 | Phase 1 | Pending |
+| ONNX-03 | Phase 1 | Pending |
+| BENCH-01 | Phase 1 | Pending |
+| BENCH-02 | Phase 1 | Pending |
+| BENCH-03 | Phase 1 | Pending |
+| BENCH-04 | Phase 1 | Pending |
+| BENCH-05 | Phase 1 | Pending |
+| BENCH-06 | Phase 1 | Pending |
+| LOG-01 | Phase 2 | Pending |
+| LOG-02 | Phase 2 | Pending |
+| LOG-03 | Phase 2 | Pending |
+| LOG-04 | Phase 2 | Pending |
+| LOG-05 | Phase 2 | Pending |
+| LOG-06 | Phase 2 | Pending |
+| LOG-07 | Phase 2 | Pending |
+| LOG-08 | Phase 2 | Pending |
+| LOG-09 | Phase 2 | Pending |
+| LOG-10 | Phase 2 | Pending |
+| LOG-11 | Phase 2 | Pending |
+| LOG-12 | Phase 2 | Pending |
+| CLI-01 | Phase 2 | Pending |
+| CLI-02 | Phase 2 | Pending |
+| CLI-03 | Phase 2 | Pending |
+| TRT-01 | Phase 3 | Pending |
+| TRT-02 | Phase 3 | Pending |
+| TRT-03 | Phase 3 | Pending |
+| TRT-04 | Phase 3 | Pending |
+| TRT-05 | Phase 3 | Pending |
+| CAL-01 | Phase 4 | Pending |
+| CAL-02 | Phase 4 | Pending |
+| CAL-03 | Phase 4 | Pending |
+| CAL-04 | Phase 4 | Pending |
+| CAL-05 | Phase 4 | Pending |
+| MIX-01 | Phase 5 | Pending |
+| MIX-02 | Phase 5 | Pending |
+| MIX-03 | Phase 5 | Pending |
 
 **Coverage:**
-- v1 requirements: 30 total
-- Mapped to phases: 0
-- Unmapped: 30
+- v1 requirements: 41 total (3 ADPT + 3 ONNX + 5 TRT + 5 CAL + 3 MIX + 12 LOG + 3 CLI + 6 BENCH + 1 FIX)
+- Mapped to phases: 41
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-05-09*
-*Last updated: 2026-05-09 after initial definition*
+*Last updated: 2026-05-09 after roadmap creation*
