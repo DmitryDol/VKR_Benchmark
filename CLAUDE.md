@@ -28,6 +28,23 @@
 4. Data Flow: Изображения `data/val2017`, аннотации `data/annotations`.
 5. BF16 Verification: Поддержка аппаратного Bfloat16 должна проверяться перед сборкой движка (`builder.platform_has_fast_native_fp16`).
 
+## Optimization Pipeline (Core Logic)
+
+Код должен поддерживать проведение каждой модели через следующий пайплайн экспериментов:
+
+1. Stage 1: Baseline (PyTorch FP32). (Учитывая правило Baseline Integrity).
+2. Stage 2: ONNX Export. Обязательное применение `onnx-simplifier` к вычислительному графу.
+3. Stage 3: TensorRT TF32. 32-битная точность, но с передачей флага `trt.BuilderFlag.TF32` для активации тензорных ядер Ampere.
+4. Stage 4: TensorRT Half Precision. Два независимых билда: классический FP16 и аппаратно поддерживаемый BF16.
+5. Stage 5: TensorRT INT8 (Extreme Compression). Обязательная реализация трех модулей калибровки: 
+   - MinMax Calibration
+   - Entropy Calibration
+   - Percentile Calibration
+6. Stage 6: Mixed Precision Quantization (INT8 + FP16). Использование лучшего метода из Stage 5 с fallback-стратегиями:
+   - Strategy A: Первый и последний слои сети в FP16, остальное — INT8.
+   - Strategy B: Все блоки Softmax и LayerNorm в FP16, остальное — INT8.
+   - Strategy C (Sensitivity Analysis): Программный поиск N% самых чувствительных к потере точности слоев и сохранение их в FP16.
+
 ## Логируемые метрики
 
 1. Latency (ms): Pre-processing + Inference + Post-processing.
@@ -37,3 +54,4 @@
 5. IoU.
 6. Model Size (MB) & VRAM Usage (MB).
 7. MACs / FLOPs.
+8. Формат сохранения: Все метрики по каждому этапу пайплайна должны структурированно сохраняться в `.csv` и `.json` файлы для последующего анализа и вставки в дипломную работу.
