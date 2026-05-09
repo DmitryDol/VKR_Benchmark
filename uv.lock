@@ -512,6 +512,22 @@ wheels = [
 ]
 
 [[package]]
+name = "onnxsim"
+version = "0.6.3"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "onnx" },
+    { name = "rich" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/ca/e2/18dc34b79893dfa40fab6386b9024cfafb7050d87441b7af99dec414b65c/onnxsim-0.6.3.tar.gz", hash = "sha256:5ea844096208ba0a19d59ecee9b88e37c0059222ec2d30d35f400a2cdc5e5c58", size = 2729697, upload-time = "2026-04-29T13:55:11.29Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ec/b6/8aaa5a08fc552c85c7def463c34f77c955a7cb77d1fc09fd0cb28ef498f7/onnxsim-0.6.3-cp312-abi3-macosx_11_0_arm64.whl", hash = "sha256:272982fc45af9527528208bff5fb7ea4f9eefd9543e63e9b4ed12c2886639c15", size = 1868204, upload-time = "2026-04-29T13:55:02.973Z" },
+    { url = "https://files.pythonhosted.org/packages/b5/9a/27e3441185153715b05e3ba9ba758f95d583e96b3e5b912448929a4b8d4e/onnxsim-0.6.3-cp312-abi3-manylinux_2_26_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:2308fc339a1767611dbd7336c3b84a4d91ff7b5172cadbd082ac3170717cac0f", size = 2628874, upload-time = "2026-04-29T13:55:05.142Z" },
+    { url = "https://files.pythonhosted.org/packages/6b/68/9bbb830e240557f6f5bbd2da2e9df3abbf3bf850e088814bd90194ee8efe/onnxsim-0.6.3-cp312-abi3-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:5b5f78597af8e7f845ab326739809dab1a1e9196016b861f0bb12bd4521a85cf", size = 2937736, upload-time = "2026-04-29T13:55:07.098Z" },
+    { url = "https://files.pythonhosted.org/packages/e4/12/5cb26d101e20897bb270f3ea0e4eba1d6f8b78787f199bc6caf3d13928c8/onnxsim-0.6.3-cp312-abi3-win_amd64.whl", hash = "sha256:8e5334d2946dca52564cf05df6628830c7a1b1a24ef91adca61d06b123b61f58", size = 1641767, upload-time = "2026-04-29T13:55:08.965Z" },
+]
+
+[[package]]
 name = "packaging"
 version = "26.2"
 source = { registry = "https://pypi.org/simple" }
@@ -818,6 +834,7 @@ dependencies = [
     { name = "numpy" },
     { name = "onnx" },
     { name = "onnxruntime-gpu" },
+    { name = "onnxsim" },
     { name = "pillow" },
     { name = "pycocotools" },
     { name = "torch" },
@@ -835,6 +852,7 @@ requires-dist = [
     { name = "numpy", specifier = ">=2.0.0" },
     { name = "onnx", specifier = ">=1.17.0" },
     { name = "onnxruntime-gpu", specifier = ">=1.22.0" },
+    { name = "onnxsim", specifier = ">=0.4.36" },
     { name = "pillow", specifier = ">=11.0.0" },
     { name = "pycocotools", specifier = ">=2.0.11" },
     { name = "tensorrt", marker = "extra == 'tensorrt'", specifier = ">=10.9.0" },
