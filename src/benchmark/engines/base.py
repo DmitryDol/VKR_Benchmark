@@ -31,9 +31,9 @@ MEASURE_RUNS: int = 1000
 class Detection:
     """Single detection result."""
 
-    boxes: NDArray[np.float32]    # (N, 4) x1y1x2y2
-    scores: NDArray[np.float32]   # (N,)
-    labels: NDArray[np.int64]     # (N,) COCO 91-class IDs
+    boxes: NDArray[np.float32]  # (N, 4) x1y1x2y2
+    scores: NDArray[np.float32]  # (N,)
+    labels: NDArray[np.int64]  # (N,) COCO 91-class IDs
 
 
 class BaseEngine(ABC):
@@ -164,12 +164,14 @@ class BaseEngine(ABC):
 
             for j in range(len(detection.scores)):
                 x1, y1, x2, y2 = detection.boxes[j]
-                coco_results.append({
-                    "image_id": sample.image_id,
-                    "category_id": int(detection.labels[j]),
-                    "bbox": [float(x1), float(y1), float(x2 - x1), float(y2 - y1)],
-                    "score": float(detection.scores[j]),
-                })
+                coco_results.append(
+                    {
+                        "image_id": sample.image_id,
+                        "category_id": int(detection.labels[j]),
+                        "bbox": [float(x1), float(y1), float(x2 - x1), float(y2 - y1)],
+                        "score": float(detection.scores[j]),
+                    }
+                )
 
         if not coco_results:
             logger.warning("No detections produced!")
@@ -183,7 +185,7 @@ class BaseEngine(ABC):
 
         return {
             "map_50_95": float(coco_eval.stats[0]),  # AP @ IoU=0.50:0.95
-            "map_50": float(coco_eval.stats[1]),      # AP @ IoU=0.50
+            "map_50": float(coco_eval.stats[1]),  # AP @ IoU=0.50
         }
 
     def measure_vram(self) -> float:
