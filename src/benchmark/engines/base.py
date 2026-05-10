@@ -93,8 +93,8 @@ class BaseEngine(ABC):
         for i in range(WARMUP_RUNS):
             sample = samples[i % n_samples]
             inputs = self.preprocess(sample)
-            self.infer(inputs)
-            self.postprocess(self.infer(inputs), sample)
+            raw = self.infer(inputs)
+            self.postprocess(raw, sample)
 
         # Sync GPU before measurement
         if torch.cuda.is_available():
