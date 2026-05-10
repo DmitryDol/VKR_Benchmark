@@ -6,7 +6,7 @@ Six-stage hardware optimization pipeline for RT-DETR transformer object detectio
 
 ## Phases
 
-- [ ] **Phase 1: RT-DETR Adapter & ONNX Pipeline** - Working RT-DETR FP32 baseline with ONNX export producing verified models
+- [x] **Phase 1: RT-DETR Adapter & ONNX Pipeline** - Working RT-DETR FP32 baseline with ONNX export producing verified models
 - [ ] **Phase 2: Metrics, Logging & CLI** - Complete metric capture and structured CSV/JSON output with full CLI interface
 - [ ] **Phase 3: TensorRT TF32, FP16, BF16** - Three TensorRT precision engines running and benchmarkable
 - [ ] **Phase 4: TensorRT INT8 Calibration** - Three INT8 calibrators (MinMax, Entropy, Percentile) producing quantized engines
@@ -24,7 +24,7 @@ Six-stage hardware optimization pipeline for RT-DETR transformer object detectio
   3. TF32 is explicitly disabled during FP32 baseline inference (verifiable via torch.backends.cuda setting)
   4. ONNX export produces a .onnx file that passes onnx-simplifier and onnx.checker validation without errors
   5. VRAM cache is cleared and peak VRAM counter is reset between engine initializations
-**Plans**: TBD
+**Plans**: PLAN.md (1 plan, 5 waves, 8 tasks — PASS verified)
 
 ### Phase 2: Metrics, Logging & CLI
 **Goal**: All benchmark metrics are captured, structured, and accessible via CLI commands
@@ -75,7 +75,7 @@ Six-stage hardware optimization pipeline for RT-DETR transformer object detectio
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. RT-DETR Adapter & ONNX Pipeline | 0/TBD | Not started | - |
+| 1. RT-DETR Adapter & ONNX Pipeline | 1/1 | Complete | 2026-05-10 |
 | 2. Metrics, Logging & CLI | 0/TBD | Not started | - |
 | 3. TensorRT TF32, FP16, BF16 | 0/TBD | Not started | - |
 | 4. TensorRT INT8 Calibration | 0/TBD | Not started | - |
