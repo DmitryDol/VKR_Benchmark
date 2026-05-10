@@ -18,6 +18,7 @@ import sys
 from pathlib import Path
 
 import torch
+from fvcore.nn import FlopCountAnalysis
 
 from benchmark.data.coco_loader import COCODataLoader
 from benchmark.engines.onnx_export import export_to_onnx, simplify_onnx
@@ -131,6 +132,19 @@ def main() -> int:
     # run_full_benchmark: warm-up (50 runs) + 1000 measured + mAP eval
     result = engine.run_full_benchmark(dataloader, baseline_map_50_95=0.0)
 
+    # MACs / FLOPs via fvcore (Triton unavailable on Windows — unsupported ops skipped)
+    try:
+        dummy = engine.dummy_input()
+        flop_counter = FlopCountAnalysis(engine.model, dummy)
+        flop_counter.unsupported_ops_warnings(False)
+        flop_counter.uncalled_modules_warnings(False)
+        total_flops = float(flop_counter.total())
+        result.macs = total_flops / 2.0
+        result.flops = total_flops
+        logger.info("MACs: %.2f G | FLOPs: %.2f G", result.macs / 1e9, result.flops / 1e9)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("MACs/FLOPs skipped: %s", exc)
+
     logger.info(
         "FP32 Results — latency: %.1f ms | FPS: %.1f | mAP@50:95: %.3f"
         " | VRAM: %.0f MB | Size: %.0f MB",
@@ -160,7 +174,7 @@ def main() -> int:
             wrapper,
             output_path=onnx_raw,
             input_size=(640, 640),
-            opset_version=17,
+            opset_version=18,
             dynamic_axes=_ONNX_DYNAMIC_AXES,
             input_names=["pixel_values"],
             output_names=["logits", "pred_boxes"],

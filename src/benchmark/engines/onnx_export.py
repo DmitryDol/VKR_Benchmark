@@ -31,7 +31,7 @@ def export_to_onnx(
     model: nn.Module,
     output_path: Path,
     input_size: tuple[int, int] = (640, 640),
-    opset_version: int = 17,
+    opset_version: int = 18,
     dynamic_axes: dict[str, dict[int, str]] | None = None,
     input_names: list[str] | None = None,
     output_names: list[str] | None = None,
@@ -85,6 +85,7 @@ def export_to_onnx(
             output_names=_output_names,
             dynamic_axes=dynamic_axes,
             do_constant_folding=True,
+            dynamo=False,  # Force legacy TorchScript backend; required for TensorRT
         )
 
     validate_onnx(output_path)
@@ -165,7 +166,7 @@ def export_and_simplify(
     model: nn.Module,
     output_path: Path,
     input_size: tuple[int, int] = (640, 640),
-    opset_version: int = 17,
+    opset_version: int = 18,
     dynamic_axes: dict[str, dict[int, str]] | None = None,
     input_names: list[str] | None = None,
     output_names: list[str] | None = None,

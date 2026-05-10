@@ -78,12 +78,12 @@ def main() -> int:
     raw_onnx = args.weights_dir / "rtdetr_r50.onnx"
     sim_onnx = args.weights_dir / "rtdetr_r50_sim.onnx"
 
-    # Step 1: Export to ONNX (opset 17)
+    # Step 1: Export to ONNX (opset 18)
     export_to_onnx(
         wrapper,
         output_path=raw_onnx,
         input_size=(640, 640),
-        opset_version=17,
+        opset_version=18,
         dynamic_axes=_DYNAMIC_AXES,
         input_names=["pixel_values"],
         output_names=["logits", "pred_boxes"],

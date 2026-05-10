@@ -16,7 +16,7 @@ _EXPECTED_X1 = 160.0
 _EXPECTED_Y1 = 120.0
 _BOX_DIMS = 4
 _COORD_TOL = 1e-3
-_EXPECTED_COCO_ID = 6  # class_idx=5 after bg strip → COCO-91 ID 6
+_EXPECTED_COCO_ID = 6  # COCO-80 index=5 → COCO-91 ID 6 (bus)
 
 
 @pytest.fixture
@@ -27,15 +27,15 @@ def adapter() -> RTDETRAdapter:
 
 def _make_fake_output(
     num_queries: int = 300,
-    num_classes_with_bg: int = 92,
+    num_classes: int = 80,
     score_for_class_idx: int = 5,
     score_value: float = 5.0,
 ) -> object:
     """Build a fake RTDetrObjectDetectionOutput-like namespace."""
-    logits = torch.full((1, num_queries, num_classes_with_bg), -10.0)
-    # Give query 0 a high score for class_idx=5 (background stripped → COCO ID=6).
-    # logits[:, :, 0] = background (stripped); class index 5 → slice index 6 (5+1 for bg).
-    logits[0, 0, score_for_class_idx + 1] = score_value  # +1 for background offset
+    logits = torch.full((1, num_queries, num_classes), -10.0)
+    # Give query 0 a high score for COCO-80 index 5 (→ COCO-91 ID 6, bus).
+    # No background offset — model outputs 80 classes directly.
+    logits[0, 0, score_for_class_idx] = score_value
     pred_boxes = torch.zeros(1, num_queries, 4)
     # Query 0: cx=0.5, cy=0.5, w=0.5, h=0.5 normalized
     pred_boxes[0, 0] = torch.tensor([0.5, 0.5, 0.5, 0.5])
@@ -90,7 +90,7 @@ def test_parse_outputs_no_background_label(adapter: RTDETRAdapter) -> None:
 
 
 def test_parse_outputs_label_is_coco91_class_index_plus_one(adapter: RTDETRAdapter) -> None:
-    """Class at logit position 5 (after background strip) → COCO-91 ID 6."""
+    """COCO-80 index 5 maps to COCO-91 ID 6 (bus) via LUT."""
     raw = _make_fake_output(score_for_class_idx=5, score_value=10.0)
     result = adapter.parse_outputs(
         raw, original_size=(480, 640), input_size=(640, 640), score_threshold=0.01

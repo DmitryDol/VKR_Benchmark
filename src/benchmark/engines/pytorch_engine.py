@@ -124,7 +124,8 @@ class PyTorchEngine(BaseEngine):
         h, w = self._adapter.input_size
         img = Image.fromarray(sample.image).resize((w, h), Image.BILINEAR)
         tensor = tvf.to_tensor(img)  # (3, H, W) float32 [0, 1]
-        tensor = tvf.normalize(tensor, mean=IMAGENET_MEAN, std=IMAGENET_STD)
+        # RT-DETR expects pixels in [0, 1] WITHOUT ImageNet normalization
+        # (preprocessor_config.json: "do_normalize": false)
         return tensor.unsqueeze(0).to(self._device)
 
     def infer(self, inputs: object) -> object:
@@ -133,7 +134,7 @@ class PyTorchEngine(BaseEngine):
             msg = "Model not loaded. Call load_model() first."
             raise RuntimeError(msg)
         with torch.no_grad():
-            return self._model(inputs)
+            return self._model(pixel_values=inputs)
 
     def postprocess(self, raw_outputs: object, sample: COCOSample) -> Detection:
         """Delegate to adapter for model-specific output parsing."""
