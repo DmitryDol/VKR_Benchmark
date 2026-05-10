@@ -162,6 +162,10 @@ def run_benchmark(
         Path,
         typer.Option("--output-dir", help="Results output directory"),
     ] = Path("results"),
+    run_id: Annotated[
+        str,
+        typer.Option("--run-id", help="Run ID to resume (auto-generated timestamp if omitted)"),
+    ] = "",
 ) -> None:
     """Run benchmark for a model (CLI-01 + CLI-02, D-13)."""
     _configure_logging()
@@ -179,7 +183,8 @@ def run_benchmark(
 
     # D-03: collect hardware info once at startup
     hw = HardwareInfo.collect()
-    result_logger = ResultLogger(output_dir=resolved_dir, hardware=hw)
+    result_logger = ResultLogger(output_dir=resolved_dir, hardware=hw, run_id=run_id)
+    typer.echo(f"Run ID: {result_logger.run_id}")
 
     stages_to_run = STAGE_REGISTRY if all_stages else [stage]  # type: ignore[list-item]
 
@@ -216,6 +221,10 @@ def merge_results(
         Path,
         typer.Option("--output-dir", help="Results directory containing per-stage files"),
     ] = Path("results"),
+    run_id: Annotated[
+        str,
+        typer.Option("--run-id", help="Run ID to merge (required if multiple runs exist)"),
+    ] = "",
 ) -> None:
     """Merge per-stage CSVs into unified results files (CLI-03, D-06)."""
     _configure_logging()
@@ -223,7 +232,7 @@ def merge_results(
     # T-02-05: resolve to avoid path traversal
     resolved_dir = Path(output_dir).resolve()
 
-    result_logger = ResultLogger(output_dir=resolved_dir)
+    result_logger = ResultLogger(output_dir=resolved_dir, run_id=run_id)
     try:
         csv_path, json_path = result_logger.merge_to_unified(model)
         typer.echo(f"Merged: {csv_path}, {json_path}")
