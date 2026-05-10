@@ -57,7 +57,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--weights-dir",
         type=Path,
-        default=Path("weights/rtdetr-r50"),
+        default=Path("weights/rtdetr-r50vd"),
         help="Path to downloaded RT-DETR weights directory",
     )
     parser.add_argument(

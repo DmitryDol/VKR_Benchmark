@@ -1,12 +1,12 @@
-"""Export RT-DETR (PekingU/rtdetr-r50) to ONNX with onnxsim simplification.
+"""Export RT-DETR (PekingU/rtdetr_r50vd) to ONNX with onnxsim simplification.
 
 Usage:
     uv run python scripts/export_rtdetr_onnx.py
-    uv run python scripts/export_rtdetr_onnx.py --weights-dir weights/rtdetr-r50
+    uv run python scripts/export_rtdetr_onnx.py --weights-dir weights/rtdetr-r50vd
 
 Outputs:
-    weights/rtdetr-r50/rtdetr_r50.onnx       — raw ONNX export (opset 17)
-    weights/rtdetr-r50/rtdetr_r50_sim.onnx   — onnxsim-simplified ONNX
+    weights/rtdetr-r50vd/rtdetr_r50.onnx       — raw ONNX export (opset 17)
+    weights/rtdetr-r50vd/rtdetr_r50_sim.onnx   — onnxsim-simplified ONNX
 """
 
 from __future__ import annotations
@@ -39,7 +39,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--weights-dir",
         type=Path,
-        default=Path("weights/rtdetr-r50"),
+        default=Path("weights/rtdetr-r50vd"),
         help="Path to downloaded RT-DETR weights directory",
     )
     parser.add_argument(

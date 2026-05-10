@@ -1,7 +1,7 @@
 """RT-DETR ModelAdapter for HuggingFace transformers RTDetrForObjectDetection.
 
 Implements the ModelAdapter protocol defined in pytorch_engine.py.
-Model: PekingU/rtdetr-r50 (ResNet-50, 640x640 input, COCO-91 classes).
+Model: PekingU/rtdetr_r50vd (ResNet-50 Visual Dependency, 640x640 input, COCO-91 classes).
 """
 
 from __future__ import annotations
@@ -63,7 +63,7 @@ class RTDetrONNXWrapper(nn.Module):
 
 
 class RTDETRAdapter:
-    """ModelAdapter for PekingU/rtdetr-r50 via HuggingFace transformers.
+    """ModelAdapter for PekingU/rtdetr_r50vd via HuggingFace transformers.
 
     Implements the ModelAdapter protocol (pytorch_engine.py:29-72).
     Handles: weight loading, output parsing (sigmoid + threshold + box convert).

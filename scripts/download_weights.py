@@ -3,7 +3,7 @@
 Usage:
     uv run python scripts/download_weights.py
 
-Downloads PekingU/rtdetr-r50 to weights/rtdetr-r50/ (gitignored).
+Downloads PekingU/rtdetr_r50vd to weights/rtdetr-r50vd/ (gitignored).
 Skips download if weights already present.
 """
 
@@ -18,14 +18,14 @@ from huggingface_hub import snapshot_download
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
 
-REPO_ID = "PekingU/rtdetr-r50"
-LOCAL_DIR = Path("weights/rtdetr-r50")
+REPO_ID = "PekingU/rtdetr_r50vd"
+LOCAL_DIR = Path("weights/rtdetr-r50vd")
 # Skip non-PyTorch serialization formats to save disk space
 IGNORE_PATTERNS = ["*.msgpack", "*.h5", "flax_*", "tf_*", "rust_*"]
 
 
 def download_rtdetr_r50(local_dir: Path = LOCAL_DIR) -> Path:
-    """Download PekingU/rtdetr-r50 weights to local directory.
+    """Download PekingU/rtdetr_r50vd weights to local directory.
 
     Parameters
     ----------
