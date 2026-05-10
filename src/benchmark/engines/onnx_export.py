@@ -33,6 +33,8 @@ def export_to_onnx(
     input_size: tuple[int, int] = (640, 640),
     opset_version: int = 17,
     dynamic_axes: dict[str, dict[int, str]] | None = None,
+    input_names: list[str] | None = None,
+    output_names: list[str] | None = None,
 ) -> Path:
     """Export a PyTorch model to ONNX format.
 
@@ -57,6 +59,9 @@ def export_to_onnx(
     if dynamic_axes is None:
         dynamic_axes = DEFAULT_DYNAMIC_AXES
 
+    _input_names = input_names if input_names is not None else ["input"]
+    _output_names = output_names if output_names is not None else ["output"]
+
     device = next(model.parameters()).device
     dummy_input = torch.randn(1, 3, *input_size, device=device)
 
@@ -76,8 +81,8 @@ def export_to_onnx(
             dummy_input,
             str(output_path),
             opset_version=opset_version,
-            input_names=["input"],
-            output_names=["output"],
+            input_names=_input_names,
+            output_names=_output_names,
             dynamic_axes=dynamic_axes,
             do_constant_folding=True,
         )
@@ -162,6 +167,8 @@ def export_and_simplify(
     input_size: tuple[int, int] = (640, 640),
     opset_version: int = 17,
     dynamic_axes: dict[str, dict[int, str]] | None = None,
+    input_names: list[str] | None = None,
+    output_names: list[str] | None = None,
 ) -> Path:
     """Export PyTorch model to ONNX and run onnx-simplifier.
 
@@ -179,6 +186,8 @@ def export_and_simplify(
         input_size=input_size,
         opset_version=opset_version,
         dynamic_axes=dynamic_axes,
+        input_names=input_names,
+        output_names=output_names,
     )
 
     return simplify_onnx(raw_path, output_path=raw_path)
