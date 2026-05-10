@@ -62,7 +62,9 @@ Plans:
   3. Percentile calibrator runs on COCO val2017 images and produces a valid INT8 TensorRT engine
   4. All three INT8 engines run inference via the standard benchmarking protocol and produce per-stage CSV/JSON output files
   5. Best calibrator (by mAP_50:95) is identified in the unified results and logged for use in Phase 5
-**Plans**: TBD
+**Plans**: 1 plan
+Plans:
+- [ ] 04-01-PLAN.md — Create int8_calibrators.py (3 calibrator classes) + extend TensorRTEngine for INT8 + wire CLI INT8 stages
 
 ### Phase 5: Mixed Precision & Final Run
 **Goal**: Strategy A and B mixed precision engines build and run, and full pipeline produces diploma-ready output files
@@ -81,5 +83,5 @@ Plans:
 | 1. RT-DETR Adapter & ONNX Pipeline | 1/1 | Complete | 2026-05-10 |
 | 2. Metrics, Logging & CLI | 1/1 | Complete | 2026-05-10 |
 | 3. TensorRT TF32, FP16, BF16 | 2/2 | Complete | 2026-05-11 |
-| 4. TensorRT INT8 Calibration | 0/TBD | Not started | - |
+| 4. TensorRT INT8 Calibration | 0/1 | Planning | - |
 | 5. Mixed Precision & Final Run | 0/TBD | Not started | - |
