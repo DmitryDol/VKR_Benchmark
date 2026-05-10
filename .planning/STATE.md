@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: planning
-stopped_at: Phase 1 context gathered
-last_updated: "2026-05-09T19:30:29.182Z"
-last_activity: 2026-05-09 — Roadmap created, entering Phase 1 planning
+status: executing
+stopped_at: Phase 1 Plan complete — all 7 tasks committed
+last_updated: "2026-05-10T12:00:00.000Z"
+last_activity: 2026-05-10 — Phase 1 plan executed (7 tasks, 8 commits, 8 passed / 4 skipped tests)
 progress:
   total_phases: 5
   completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
-  percent: 0
+  total_plans: 1
+  completed_plans: 1
+  percent: 20
 ---
 
 # Project State
@@ -21,35 +21,35 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-09)
 
 **Core value:** Scientifically rigorous, per-stage metric logging showing optimization evolution for transformer-based object detectors.
-**Current focus:** Phase 1 — RT-DETR Adapter & ONNX Pipeline
+**Current focus:** Phase 1 complete — RT-DETR Adapter & ONNX Pipeline delivered
 
 ## Current Position
 
 Phase: 1 of 5 (RT-DETR Adapter & ONNX Pipeline)
-Plan: 0 of TBD in current phase
-Status: Ready to plan
-Last activity: 2026-05-09 — Roadmap created, entering Phase 1 planning
+Plan: 1 of 1 in current phase (COMPLETE)
+Status: Phase 1 done — ready for Phase 2
+Last activity: 2026-05-10 — Phase 1 execution complete
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [██░░░░░░░░] 20%
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 0
-- Average duration: -
-- Total execution time: 0 hours
+- Total plans completed: 1
+- Average duration: ~30 min
+- Total execution time: ~0.5 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| - | - | - | - |
+| Phase 1 | 1 | ~30m | ~30m |
 
 **Recent Trend:**
 
-- Last 5 plans: -
-- Trend: -
+- Last 5 plans: Phase 1 complete
+- Trend: on track
 
 *Updated after each plan completion*
 
@@ -64,10 +64,14 @@ Recent decisions affecting current work:
 - Init: Strategy C (Sensitivity Analysis) deferred to v2 — ADV-01
 - Init: Existing code has double infer() bug in base.py:96-97 — FIX-01 must be first action in Phase 1
 - Init: Metrics and CLI are Phase 2 (after adapter works) — ensures logging layer is tested against working baseline
+- Phase 1: pytest pythonpath=["src"] required for benchmark package resolution in tests
+- Phase 1: noqa ARG002 used for ModelAdapter.parse_outputs input_size (normalized boxes make it unused by design)
+- Phase 1: ONNX tests are skip-gated on weights presence (not stubs) — will run after download_weights.py
 
 ### Pending Todos
 
-None yet.
+- Download RT-DETR weights: `uv run python scripts/download_weights.py`
+- Run full E2E benchmark: `uv run python scripts/run_phase1.py --limit 5`
 
 ### Blockers/Concerns
 
@@ -85,6 +89,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-05-09T19:30:29.174Z
-Stopped at: Phase 1 context gathered
-Resume file: .planning/phases/01-rt-detr-adapter-onnx-pipeline/01-CONTEXT.md
+Last session: 2026-05-10T12:00:00.000Z
+Stopped at: Phase 1 Plan complete — all 7 tasks committed
+Resume file: .planning/phases/phase-1/phase-1-PLAN-SUMMARY.md
