@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: completed
-stopped_at: Phase 1 Plan complete — all 7 tasks committed
-last_updated: "2026-05-10T15:05:02.082Z"
-last_activity: 2026-05-10 -- Phase 2 marked complete
+stopped_at: Phase 4 context gathered
+last_updated: "2026-05-10T23:27:16.486Z"
+last_activity: 2026-05-11 -- Phase 3 execution complete
 progress:
   total_phases: 5
-  completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
-  percent: 0
+  completed_phases: 1
+  total_plans: 2
+  completed_plans: 2
+  percent: 100
 ---
 
 # Project State
@@ -21,30 +21,32 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-09)
 
 **Core value:** Scientifically rigorous, per-stage metric logging showing optimization evolution for transformer-based object detectors.
-**Current focus:** Phase 2 — Metrics, Logging & CLI
+**Current focus:** Phase 4 — TensorRT INT8 Calibration
 
 ## Current Position
 
-Phase: 2 — COMPLETE
-Plan: 1 of 1
-Status: Phase 2 complete
-Last activity: 2026-05-10 -- Phase 2 marked complete
+Phase: 3 — Complete
+Plan: 2 of 2
+Status: Phase 3 executed — TensorRTEngine + CLI wiring complete
+Last activity: 2026-05-11 -- Phase 3 execution complete
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [██████░░░░] 60%
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 1
-- Average duration: ~30 min
-- Total execution time: ~0.5 hours
+- Total plans completed: 4
+- Average duration: ~20 min
+- Total execution time: ~1.5 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | Phase 1 | 1 | ~30m | ~30m |
+| Phase 2 | 1 | ~2h | ~2h |
+| Phase 3 | 2 | ~10m | ~5m |
 
 **Recent Trend:**
 
@@ -77,7 +79,7 @@ Recent decisions affecting current work:
 ### Blockers/Concerns
 
 - TensorRT INT8 calibration requires enough COCO val2017 images to fill calibrator cache — verify image count at Phase 4
-- BF16 support on RTX 3070 needs runtime check; engine may not build (Ampere supports FP16 natively but BF16 via NV tensorcores)
+- BF16: RTX 3070 is Ampere sm_86 — builder.platform_has_tf32=True confirmed; trt.BuilderFlag.BF16 exists in TRT 10.16.1.11
 
 ## Deferred Items
 
@@ -97,6 +99,6 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-05-10
-Stopped at: Phase 2 shipped — PR #1 open, ready for merge
-Resume file: None
+Last session: 2026-05-10T23:27:16.478Z
+Stopped at: Phase 4 context gathered
+Resume file: .planning/phases/04-tensorrt-int8-calibration/04-CONTEXT.md

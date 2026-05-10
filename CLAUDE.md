@@ -26,7 +26,7 @@
 2. Memory Profiling: Пиковое потребление видеопамяти фиксировать строго через `torch.cuda.max_memory_allocated()`. Обязательно освобождать память и очищать кэш CUDA между инициализациями разных движков.
 3. Code Quality: Код должен быть строго типизирован. Логика должна быть модульной (отдельно DataLoader, отдельно Engine, отдельно Logger).
 4. Data Flow: Изображения `data/val2017`, аннотации `data/annotations`.
-5. BF16 Verification: Поддержка аппаратного Bfloat16 должна проверяться перед сборкой движка (`builder.platform_has_fast_native_fp16`).
+5. BF16 Verification: Поддержка аппаратного Bfloat16 должна проверяться перед сборкой движка через TensorRT Builder API (`builder.platform_has_tf32` — признак Ampere sm_80+, на котором доступен BF16). Отдельного атрибута `platform_has_bf16` в TRT 10.x не существует. Флаг для сборки: `trt.BuilderFlag.BF16`.
 
 ## Optimization Pipeline (Core Logic)
 
@@ -91,7 +91,7 @@ A production-ready benchmarking framework that conducts six SOTA transformer-bas
 - Windows 11 Pro (primary development platform)
 - TF32 disabled for FP32 baselines (`torch.backends.cuda.matmul.allow_tf32 = False`)
 - TensorRT workspace limit: 2 GB (`config.set_memory_pool_limit(trt.MemoryPoolType.WORKSPACE, 2 << 30)`)
-- BF16 support must be verified at runtime (`builder.platform_has_fast_native_fp16`)
+- BF16 support must be verified at runtime via `builder.platform_has_tf32` (Ampere proxy — no dedicated BF16 attribute in TRT 10.x; `trt.BuilderFlag.BF16` exists for the engine build flag)
 ## Package Manager
 - Lockfile: `uv.lock` (present, 863 lines, revision 3)
 - Custom index for PyTorch CUDA builds:
