@@ -167,6 +167,18 @@ class TensorRTEngine(BaseEngine):
                 raise _BF16UnsupportedError(msg)
             config.set_flag(trt.BuilderFlag.BF16)
 
+        # Add optimization profile for dynamic batch dimension.
+        # ONNX was exported with dynamic_axes={0: "batch"}, so TRT
+        # needs explicit min/opt/max shapes. Benchmark uses batch=1.
+        profile = builder.create_optimization_profile()
+        for i in range(network.num_inputs):
+            inp = network.get_input(i)
+            inp_shape = inp.shape  # e.g. (-1, 3, 640, 640)
+            # Replace dynamic dims (-1) with 1 for batch=1 inference
+            fixed = tuple(1 if d == -1 else d for d in inp_shape)
+            profile.set_shape(inp.name, min=fixed, opt=fixed, max=fixed)
+        config.add_optimization_profile(profile)
+
         serialized = builder.build_serialized_network(network, config)
         if serialized is None:
             msg = f"TRT engine build failed for precision={self.precision}"
@@ -257,8 +269,10 @@ class TensorRTEngine(BaseEngine):
             self._context.set_tensor_address(name, out_gpu.data_ptr())
             output_tensors.append(out_gpu)
 
-        # Execute inference
-        self._context.execute_v2([])
+        # Execute inference via TRT 10.x async API with CUDA stream
+        stream = torch.cuda.current_stream().cuda_stream
+        self._context.execute_async_v3(stream)
+        torch.cuda.synchronize()
 
         # Copy outputs to CPU
         return [t.cpu().numpy() for t in output_tensors]
