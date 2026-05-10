@@ -152,7 +152,12 @@ class BaseEngine(ABC):
     def evaluate_accuracy(self, dataloader: COCODataLoader) -> dict[str, float]:
         """Evaluate mAP on the full dataset using COCO API.
 
-        Returns dict with keys: map_50, map_50_95
+        Returns
+        -------
+        dict[str, float]
+            All 12 COCOeval stats (D-11):
+            map_50_95, map_50, map_75, map_small, map_medium, map_large,
+            ar_1, ar_10, ar_100, ar_small, ar_medium, ar_large.
         """
         coco_results: list[dict[str, float | int]] = []
 
@@ -175,7 +180,20 @@ class BaseEngine(ABC):
 
         if not coco_results:
             logger.warning("No detections produced!")
-            return {"map_50": 0.0, "map_50_95": 0.0}
+            return {
+                "map_50_95": 0.0,
+                "map_50": 0.0,
+                "map_75": 0.0,
+                "map_small": 0.0,
+                "map_medium": 0.0,
+                "map_large": 0.0,
+                "ar_1": 0.0,
+                "ar_10": 0.0,
+                "ar_100": 0.0,
+                "ar_small": 0.0,
+                "ar_medium": 0.0,
+                "ar_large": 0.0,
+            }
 
         coco_dt = dataloader.coco.loadRes(coco_results)
         coco_eval = COCOeval(dataloader.coco, coco_dt, "bbox")
@@ -183,9 +201,20 @@ class BaseEngine(ABC):
         coco_eval.accumulate()
         coco_eval.summarize()
 
+        stats = coco_eval.stats
         return {
-            "map_50_95": float(coco_eval.stats[0]),  # AP @ IoU=0.50:0.95
-            "map_50": float(coco_eval.stats[1]),  # AP @ IoU=0.50
+            "map_50_95": float(stats[0]),   # AP @ IoU=0.50:0.95  (D-11)
+            "map_50": float(stats[1]),      # AP @ IoU=0.50
+            "map_75": float(stats[2]),      # AP @ IoU=0.75
+            "map_small": float(stats[3]),   # AP, area=small
+            "map_medium": float(stats[4]),  # AP, area=medium
+            "map_large": float(stats[5]),   # AP, area=large
+            "ar_1": float(stats[6]),        # AR @ maxDets=1
+            "ar_10": float(stats[7]),       # AR @ maxDets=10
+            "ar_100": float(stats[8]),      # AR @ maxDets=100
+            "ar_small": float(stats[9]),    # AR, area=small
+            "ar_medium": float(stats[10]),  # AR, area=medium
+            "ar_large": float(stats[11]),   # AR, area=large
         }
 
     def measure_vram(self) -> float:
@@ -204,7 +233,10 @@ class BaseEngine(ABC):
     def run_full_benchmark(
         self,
         dataloader: COCODataLoader,
+        stage: str = "1_pytorch_fp32",
         baseline_map_50_95: float = 0.0,
+        macs: float | None = None,
+        flops: float | None = None,
     ) -> BenchmarkResult:
         """Run complete benchmark: latency + accuracy + VRAM.
 
@@ -212,8 +244,14 @@ class BaseEngine(ABC):
         ----------
         dataloader : COCODataLoader
             Data loader with COCO val2017 images.
+        stage : str
+            Stage identifier string (D-04), e.g. "1_pytorch_fp32".
         baseline_map_50_95 : float
             FP32 baseline mAP for accuracy drop calculation.
+        macs : float | None
+            Pre-computed MACs (computed once at stage 1, D-09). None if unknown.
+        flops : float | None
+            Pre-computed FLOPs. None if unknown.
         """
         self.reset_vram_tracking()
 
@@ -223,7 +261,7 @@ class BaseEngine(ABC):
         # VRAM after latency (model loaded + inference peak)
         vram_mb = self.measure_vram()
 
-        # Accuracy evaluation
+        # Accuracy evaluation (returns 12 keys per D-11)
         accuracy = self.evaluate_accuracy(dataloader)
 
         # Accuracy drop
@@ -233,6 +271,7 @@ class BaseEngine(ABC):
 
         return BenchmarkResult(
             model_name=self.model_name,
+            stage=stage,
             engine_type=self.engine_type,
             precision=self.precision,
             latency_preprocess_ms=latency["preprocess_ms"],
@@ -241,11 +280,24 @@ class BaseEngine(ABC):
             latency_total_ms=latency["total_ms"],
             throughput_fps=latency["fps"],
             jitter_ms=latency["jitter_ms"],
-            map_50=accuracy["map_50"],
             map_50_95=accuracy["map_50_95"],
+            map_50=accuracy["map_50"],
+            map_75=accuracy["map_75"],
+            map_small=accuracy["map_small"],
+            map_medium=accuracy["map_medium"],
+            map_large=accuracy["map_large"],
+            ar_1=accuracy["ar_1"],
+            ar_10=accuracy["ar_10"],
+            ar_100=accuracy["ar_100"],
+            ar_small=accuracy["ar_small"],
+            ar_medium=accuracy["ar_medium"],
+            ar_large=accuracy["ar_large"],
             accuracy_drop_pct=drop,
             model_size_mb=self.model_size_mb,
             vram_peak_mb=vram_mb,
+            macs=macs,
+            flops=flops,
             warmup_runs=WARMUP_RUNS,
             measure_runs=MEASURE_RUNS,
+            # hw_* fields remain "" — ResultLogger.add() injects them (D-03)
         )

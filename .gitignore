@@ -20,3 +20,6 @@ weights/*
 
 # Cache
 .ruff_cache/
+
+# intermediate results (DELETE after done)
+results/

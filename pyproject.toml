@@ -23,7 +23,11 @@ dependencies = [
     "transformers[torch]>=5.8.0",
     "onnxscript>=0.7.0",
     "fvcore>=0.1.5.post20221221",
+    "calflops>=0.3.2",
 ]
+
+[project.scripts]
+benchmark = "benchmark.cli:app"
 
 [project.optional-dependencies]
 tensorrt = [
