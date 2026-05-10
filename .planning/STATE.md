@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-09)
 
 **Core value:** Scientifically rigorous, per-stage metric logging showing optimization evolution for transformer-based object detectors.
-**Current focus:** Phase 2 — Metrics, Logging & CLI
+**Current focus:** Phase 3 — TensorRT TF32, FP16, BF16
 
 ## Current Position
 
-Phase: 2 — COMPLETE
-Plan: 1 of 1
-Status: Phase 2 complete
-Last activity: 2026-05-10 -- Phase 2 marked complete
+Phase: 3 — Ready to execute
+Plan: 0 of 2
+Status: Phase 3 planned — 2 plans, PASS verified
+Last activity: 2026-05-10 -- Phase 3 plans created and verified
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -77,7 +77,7 @@ Recent decisions affecting current work:
 ### Blockers/Concerns
 
 - TensorRT INT8 calibration requires enough COCO val2017 images to fill calibrator cache — verify image count at Phase 4
-- BF16 support on RTX 3070 needs runtime check; engine may not build (Ampere supports FP16 natively but BF16 via NV tensorcores)
+- BF16: RTX 3070 is Ampere sm_86 — builder.platform_has_tf32=True confirmed; trt.BuilderFlag.BF16 exists in TRT 10.16.1.11
 
 ## Deferred Items
 

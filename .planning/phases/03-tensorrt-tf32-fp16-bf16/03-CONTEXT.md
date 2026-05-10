@@ -34,9 +34,14 @@ existing Phase 2 CLI and `BaseEngine` contract. Phase 3 delivers stages `3_trt_t
 - **D-06:** Add `skipped_reason: str = ''` field to `BenchmarkResult`. Empty string for normal runs.
   Set to `'BF16 not supported on this GPU'` (or the actual build exception message) when skipped.
   Appears as a column in CSV — self-documenting, no file joins required.
-- **D-07:** BF16 hardware check gate: call `builder.platform_has_fast_native_fp16` before attempting
-  the BF16 build (per CLAUDE.md rule: "BF16 Verification"). If False, skip build immediately and
-  write the skipped row. If True but build still fails, catch exception, log warning, write skipped row.
+- **D-07:** BF16 hardware check gate: call `builder.platform_has_tf32` before attempting the BF16
+  build. Rationale: TRT 10.x has no dedicated `platform_has_bf16` attribute; `platform_has_tf32`
+  is the canonical TRT-native Ampere indicator (sm_80+), and BF16 is an Ampere feature. Also:
+  `trt.BuilderFlag.BF16` EXISTS in TRT 10.16.1.11 and must be used for the build flag.
+  If `platform_has_tf32` is False, skip build immediately and write the skipped row.
+  If True but build still fails (any exception), catch exception, log warning, write skipped row.
+  Note: CLAUDE.md previously referenced `platform_has_fast_native_fp16` — that was an error;
+  updated to `platform_has_tf32` per TRT 10.x API inspection.
 
 ### CLI Trigger Pattern
 - **D-08:** `benchmark run --stage 3_trt_tf32` (and analogously `4_trt_fp16`, `4_trt_bf16`) triggers
@@ -55,8 +60,8 @@ existing Phase 2 CLI and `BaseEngine` contract. Phase 3 delivers stages `3_trt_t
 ### Precision-to-Builder-Flag Mapping (Claude's Discretion)
 - TF32: `config.set_flag(trt.BuilderFlag.TF32)` — enables Ampere Tensor Core TF32 math.
 - FP16: `config.set_flag(trt.BuilderFlag.FP16)` — standard half-precision.
-- BF16: No dedicated `BuilderFlag.BF16` in TRT 10 Python API — handled via hardware check gate (D-07).
-  Researcher to confirm correct TRT 10.x API for BF16 activation if available.
+- BF16: `trt.BuilderFlag.BF16` EXISTS in TRT 10.16.1.11 (confirmed via live API inspection).
+  Use `config.set_flag(trt.BuilderFlag.BF16)` after hardware check `builder.platform_has_tf32`.
 
 ### TF32 Global PyTorch Flag (Claude's Discretion)
 - `torch.backends.cuda.matmul.allow_tf32` stays `False` globally (set by PyTorchEngine per Phase 1

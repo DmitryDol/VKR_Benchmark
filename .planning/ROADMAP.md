@@ -45,7 +45,7 @@ Six-stage hardware optimization pipeline for RT-DETR transformer object detectio
 **Success Criteria** (what must be TRUE):
   1. TensorRT TF32 engine builds from the RT-DETR ONNX model within 2 GB workspace limit and runs inference producing detection outputs
   2. TensorRT FP16 engine builds and inference latency is measurably lower than TF32 baseline
-  3. TensorRT BF16 engine build is attempted only after verifying builder.platform_has_fast_native_fp16; build skips with a logged warning if unsupported
+  3. TensorRT BF16 engine build is attempted only after verifying builder.platform_has_tf32 (TRT-native Ampere indicator; no dedicated BF16 attribute in TRT 10.x); build skips with a logged warning if unsupported
   4. All three engines respect the 2 GB workspace memory limit enforced via config.set_memory_pool_limit
 **Plans**: 2 plans
 Plans:
