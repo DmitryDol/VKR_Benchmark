@@ -12,6 +12,8 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
+import torch
+
 if TYPE_CHECKING:
     from torch import nn
 
@@ -92,9 +94,18 @@ def _compute_macs_calflops(
         return 0.0, 0.0
 
     try:
+        # HuggingFace DETR models expect pixel_values as a keyword argument,
+        # not a positional tensor. Pass via kwargs= so calflops uses
+        # model(pixel_values=dummy) instead of model(dummy).
+        try:
+            device = next(model.parameters()).device
+        except StopIteration:
+            device = torch.device("cpu")
+        dummy = torch.zeros(*input_shape, device=device)
+
         flops_obj, macs_obj, _ = _calculate_flops(
             model=model,
-            input_shape=input_shape,
+            kwargs={"pixel_values": dummy},
             output_as_string=False,
             output_precision=6,
             print_results=False,
