@@ -69,6 +69,7 @@ class BenchmarkResult:
     timestamp: str = ""
     warmup_runs: int = 50
     measure_runs: int = 1000
+    skipped_reason: str = ""
 
     def __post_init__(self) -> None:
         if not self.timestamp:
