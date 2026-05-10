@@ -177,7 +177,7 @@ class RTDETRAdapter:
             RTDetrForObjectDetection in eval mode on target device.
         """
         logger.info("Loading RTDetrForObjectDetection from %s", weights_path)
-        model = RTDetrForObjectDetection.from_pretrained(str(weights_path))
+        model = RTDetrForObjectDetection.from_pretrained(str(weights_path.resolve()))
         model.eval()
         model = model.to(device)
 
