@@ -15,6 +15,7 @@ data/val2017/
 data/annotations/
 
 # Models weights
+weights/
 weights/*
 
 # Cache
