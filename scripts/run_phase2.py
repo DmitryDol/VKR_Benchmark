@@ -72,7 +72,7 @@ def main() -> None:
     print("=== Stage 1: PyTorch FP32 ===")
     adapter = RTDETRAdapter()
     engine = PyTorchEngine(model_name="rt-detr", adapter=adapter)
-    engine.load_model(Path("weights/rtdetr-r50/"))
+    engine.load_model(Path("weights/rtdetr-r50vd/"))
     macs, flops = compute_macs(engine.model, "rt-detr")
     result1 = engine.run_full_benchmark(
         dataloader,
