@@ -18,6 +18,7 @@ import typer
 from benchmark.data.coco_loader import COCODataLoader
 from benchmark.engines.onnx_engine import OnnxRuntimeEngine
 from benchmark.engines.pytorch_engine import PyTorchEngine
+from benchmark.engines.tensorrt_engine import TensorRTEngine
 from benchmark.utils.hardware import HardwareInfo
 from benchmark.utils.logger import ResultLogger
 from benchmark.utils.macs import compute_macs
@@ -33,6 +34,9 @@ app = typer.Typer(
 STAGE_REGISTRY: list[str] = [
     "1_pytorch_fp32",
     "2_onnx_fp32",
+    "3_trt_tf32",
+    "4_trt_fp16",
+    "4_trt_bf16",
 ]
 
 # Model registry — maps CLI name to weights directory and ONNX path
@@ -83,6 +87,8 @@ def _run_stage(
     baseline_map: float,
     macs: float | None,
     flops: float | None,
+    engine_dir: Path = Path("engines"),
+    force_rebuild: bool = False,
 ) -> tuple[float, float, float]:
     """Execute a single benchmark stage. Returns (map_50_95, macs, flops)."""
     dataloader = COCODataLoader(limit=limit)
@@ -134,8 +140,36 @@ def _run_stage(
             flops=flops,
         )
 
+    elif stage in ("3_trt_tf32", "4_trt_fp16", "4_trt_bf16"):
+        precision_map = {
+            "3_trt_tf32": "tf32",
+            "4_trt_fp16": "fp16",
+            "4_trt_bf16": "bf16",
+        }
+        precision = precision_map[stage]
+        onnx_path = Path(MODEL_REGISTRY[model_name]["onnx"])
+        if not onnx_path.exists():
+            msg = f"ONNX model missing: {onnx_path} — run stage 2 first"
+            raise FileNotFoundError(msg)
+
+        engine = TensorRTEngine(
+            model_name=model_name,
+            precision=precision,
+            engine_dir=engine_dir,
+            force_rebuild=force_rebuild,
+        )
+        engine.load_model(onnx_path)
+
+        result = engine.run_full_benchmark(
+            dataloader,
+            stage=stage,
+            baseline_map_50_95=baseline_map,
+            macs=macs,
+            flops=flops,
+        )
+
     else:
-        msg = f"Stage '{stage}' not implemented in Phase 2. Available: {STAGE_REGISTRY}"
+        msg = f"Stage '{stage}' not implemented. Available: {STAGE_REGISTRY}"
         raise typer.BadParameter(msg)
 
     result_logger.add(result)
@@ -166,6 +200,14 @@ def run_benchmark(
         str,
         typer.Option("--run-id", help="Run ID to resume (auto-generated timestamp if omitted)"),
     ] = "",
+    force_rebuild: Annotated[
+        bool,
+        typer.Option("--force-rebuild", help="Force TRT engine rebuild even if cached"),
+    ] = False,
+    engine_dir: Annotated[
+        Path,
+        typer.Option("--engine-dir", help="Directory to cache TRT .engine files"),
+    ] = Path("engines"),
 ) -> None:
     """Run benchmark for a model (CLI-01 + CLI-02, D-13)."""
     _configure_logging()
@@ -180,6 +222,8 @@ def run_benchmark(
 
     # T-02-05: resolve output_dir to avoid path traversal via shell expansion
     resolved_dir = Path(output_dir).resolve()
+    # T-03-06: resolve engine_dir to avoid path traversal
+    engine_dir = engine_dir.resolve()
 
     # D-03: collect hardware info once at startup
     hw = HardwareInfo.collect()
@@ -203,6 +247,8 @@ def run_benchmark(
                 baseline_map=baseline_map,
                 macs=macs,
                 flops=flops,
+                engine_dir=engine_dir,
+                force_rebuild=force_rebuild,
             )
             # First stage sets the baseline for accuracy_drop_pct
             if s == "1_pytorch_fp32":
