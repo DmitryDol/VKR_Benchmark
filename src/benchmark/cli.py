@@ -43,8 +43,8 @@ STAGE_REGISTRY: list[str] = [
 # Extended in later phases when additional adapters are added
 MODEL_REGISTRY: dict[str, dict[str, str]] = {
     "rt-detr": {
-        "weights": "weights/rtdetr-r50/",
-        "onnx": "weights/rtdetr-r50/rtdetr_r50_sim.onnx",
+        "weights": "weights/rtdetr-r50vd/",
+        "onnx": "weights/rtdetr-r50vd/rtdetr_r50_sim.onnx",
         "family": "detr",  # routes MACs computation
     },
 }
