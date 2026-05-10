@@ -17,6 +17,7 @@ data/annotations/
 # Models weights
 weights/
 weights/*
+engines/
 
 # Cache
 .ruff_cache/
