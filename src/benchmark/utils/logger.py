@@ -82,9 +82,13 @@ class ResultLogger:
         self,
         output_dir: Path = Path("results"),
         hardware: HardwareInfo | None = None,
+        run_id: str = "",
     ) -> None:
         self.output_dir = output_dir
         self.output_dir.mkdir(parents=True, exist_ok=True)
+        # Auto-generate run_id from timestamp if not provided; sanitize against path traversal
+        raw_id = run_id if run_id else datetime.now(tz=UTC).strftime("%Y%m%d_%H%M%S")
+        self.run_id: str = Path(raw_id).name
         self._results: list[BenchmarkResult] = []
         self._hardware = hardware
 
@@ -118,8 +122,8 @@ class ResultLogger:
         """Write per-stage CSV and JSON for a single result (D-05).
 
         Files are written to:
-            results/{model_name}/{stage}.csv
-            results/{model_name}/{stage}.json
+            results/{model_name}/{run_id}/{stage}.csv
+            results/{model_name}/{run_id}/{stage}.json
 
         Parameters
         ----------
@@ -131,7 +135,7 @@ class ResultLogger:
         tuple[Path, Path]
             (csv_path, json_path)
         """
-        stage_dir = self.output_dir / result.model_name
+        stage_dir = self.output_dir / result.model_name / self.run_id
         stage_dir.mkdir(parents=True, exist_ok=True)
 
         row = asdict(result)
@@ -155,7 +159,7 @@ class ResultLogger:
     def merge_to_unified(self, model_name: str) -> tuple[Path, Path]:
         """Merge all per-stage CSVs for model_name into unified files (D-06).
 
-        Reads: results/{model_name}/*.csv (sorted by filename = stage order)
+        Reads: results/{model_name}/{run_id}/*.csv (sorted by filename = stage order)
         Writes:
             results/results.csv   (overwrites with merged content)
             results/results.json  (overwrites with merged content)
@@ -175,7 +179,7 @@ class ResultLogger:
         FileNotFoundError
             If no stage results directory or CSV files are found.
         """
-        model_dir = self.output_dir / model_name
+        model_dir = self.output_dir / model_name / self.run_id
         if not model_dir.exists():
             msg = f"No stage results found for model '{model_name}' at {model_dir}"
             raise FileNotFoundError(msg)
