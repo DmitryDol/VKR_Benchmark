@@ -285,3 +285,7 @@ def merge_results(
     except FileNotFoundError as exc:
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(code=1) from exc
+
+
+if __name__ == "__main__":
+    app()
