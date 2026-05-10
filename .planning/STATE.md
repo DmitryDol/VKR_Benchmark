@@ -93,9 +93,10 @@ Recent decisions affecting current work:
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
 | 260510-a01 | Fix Windows backslash path bug in rtdetr_adapter.py | 2026-05-10 | 8777102 | [260510-a01-fix-windows-path-rtdetr](.planning/quick/260510-a01-fix-windows-path-rtdetr/) |
+| 260510-a02 | Add run_id to ResultLogger — timestamped subdirs, --run-id CLI flag | 2026-05-10 | — | [260510-a02-run-id-resultlogger](.planning/quick/260510-a02-run-id-resultlogger/) |
 
 ## Session Continuity
 
-Last session: 2026-05-10T15:04:13.760Z
-Stopped at: Phase 2 UAT complete — 8/9 passed, 1 issue fixed via quick task
+Last session: 2026-05-10
+Stopped at: Phase 2 UAT complete — TensorRT install + run_id fix in progress
 Resume file: None
