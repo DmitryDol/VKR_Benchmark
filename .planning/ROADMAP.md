@@ -47,7 +47,10 @@ Six-stage hardware optimization pipeline for RT-DETR transformer object detectio
   2. TensorRT FP16 engine builds and inference latency is measurably lower than TF32 baseline
   3. TensorRT BF16 engine build is attempted only after verifying builder.platform_has_fast_native_fp16; build skips with a logged warning if unsupported
   4. All three engines respect the 2 GB workspace memory limit enforced via config.set_memory_pool_limit
-**Plans**: TBD
+**Plans**: 2 plans
+Plans:
+- [ ] 03-01-PLAN.md — Add skipped_reason to BenchmarkResult + implement TensorRTEngine (lazy build, 3 precisions, full inference pipeline)
+- [ ] 03-02-PLAN.md — Wire TRT stages into CLI (STAGE_REGISTRY, _run_stage branches, --force-rebuild flag)
 
 ### Phase 4: TensorRT INT8 Calibration
 **Goal**: Three INT8 calibrators produce distinct quantized engines whose accuracy and latency are measurable
@@ -77,6 +80,6 @@ Six-stage hardware optimization pipeline for RT-DETR transformer object detectio
 |-------|----------------|--------|-----------|
 | 1. RT-DETR Adapter & ONNX Pipeline | 1/1 | Complete | 2026-05-10 |
 | 2. Metrics, Logging & CLI | 1/1 | Planned | - |
-| 3. TensorRT TF32, FP16, BF16 | 0/TBD | Not started | - |
+| 3. TensorRT TF32, FP16, BF16 | 0/2 | Planned | - |
 | 4. TensorRT INT8 Calibration | 0/TBD | Not started | - |
 | 5. Mixed Precision & Final Run | 0/TBD | Not started | - |
