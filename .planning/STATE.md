@@ -98,5 +98,5 @@ Recent decisions affecting current work:
 ## Session Continuity
 
 Last session: 2026-05-10
-Stopped at: Phase 2 UAT complete — TensorRT install + run_id fix in progress
+Stopped at: Phase 2 shipped — PR #1 open, ready for merge
 Resume file: None
