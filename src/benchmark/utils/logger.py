@@ -157,6 +157,79 @@ class ResultLogger:
         logger.info("Stage files written: %s, %s", csv_path, json_path)
         return csv_path, json_path
 
+    def save_int8_best_calibrator(
+        self,
+        model_name: str,
+    ) -> Path | None:
+        """Compare the three INT8 stage results and write int8_best_calibrator.json.
+
+        Reads ``{run_id}/{stage}.json`` for minmax, entropy, and percentile.
+        Picks the calibrator with the highest ``map_50_95`` (NaN / missing stages
+        are skipped).  Writes the result to::
+
+            results/{model_name}/{run_id}/int8_best_calibrator.json
+
+        and logs the winner at INFO level.
+
+        Parameters
+        ----------
+        model_name : str
+            The model whose INT8 results to compare.
+
+        Returns
+        -------
+        Path | None
+            Path to the written JSON file, or ``None`` if no valid INT8 results
+            were found (e.g. all stages skipped or not yet run).
+        """
+        int8_stages = {
+            "minmax": "5_trt_int8_minmax",
+            "entropy": "5_trt_int8_entropy",
+            "percentile": "5_trt_int8_percentile",
+        }
+        stage_dir = self.output_dir / model_name / self.run_id
+
+        candidates: list[dict[str, object]] = []
+        for method, stage_key in int8_stages.items():
+            json_path = stage_dir / f"{stage_key}.json"
+            if not json_path.exists():
+                continue
+            try:
+                data: dict[str, object] = json.loads(json_path.read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, OSError):
+                logger.warning("Could not read INT8 result: %s", json_path)
+                continue
+            map_val = data.get("map_50_95")
+            try:
+                map_float = float(map_val)  # type: ignore[arg-type]
+            except (TypeError, ValueError):
+                map_float = float("nan")
+            if map_float != map_float:  # NaN check
+                continue
+            candidates.append({"calibrator": method, "stage": stage_key, "map_50_95": map_float})
+
+        if not candidates:
+            logger.warning("No valid INT8 results found — int8_best_calibrator.json not written")
+            return None
+
+        best = max(candidates, key=lambda x: float(x["map_50_95"]))
+        out: dict[str, object] = {
+            "best_calibrator": best["calibrator"],
+            "best_stage": best["stage"],
+            "map_50_95": best["map_50_95"],
+            "all_candidates": candidates,
+        }
+
+        out_path = stage_dir / "int8_best_calibrator.json"
+        out_path.write_text(json.dumps(out, indent=2, ensure_ascii=False), encoding="utf-8")
+        logger.info(
+            "Best INT8 calibrator: %s (mAP_50:95=%.4f) — written to %s",
+            best["calibrator"],
+            float(best["map_50_95"]),
+            out_path,
+        )
+        return out_path
+
     def merge_to_unified(self, model_name: str) -> tuple[Path, Path]:
         """Merge all per-stage CSVs for model_name into unified files (D-06).
 
