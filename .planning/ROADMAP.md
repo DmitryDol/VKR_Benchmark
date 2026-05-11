@@ -64,7 +64,7 @@ Plans:
   5. Best calibrator (by mAP_50:95) is identified in the unified results and logged for use in Phase 5
 **Plans**: 1 plan
 Plans:
-- [ ] 04-01-PLAN.md — Create int8_calibrators.py (3 calibrator classes) + extend TensorRTEngine for INT8 + wire CLI INT8 stages
+- [x] 04-01-PLAN.md — Create int8_calibrators.py (3 calibrator classes) + extend TensorRTEngine for INT8 + wire CLI INT8 stages
 
 ### Phase 5: Mixed Precision & Final Run
 **Goal**: Strategy A and B mixed precision engines build and run, and full pipeline produces diploma-ready output files

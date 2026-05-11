@@ -37,6 +37,9 @@ STAGE_REGISTRY: list[str] = [
     "3_trt_tf32",
     "4_trt_fp16",
     "4_trt_bf16",
+    "5_trt_int8_minmax",
+    "5_trt_int8_entropy",
+    "5_trt_int8_percentile",
 ]
 
 # Model registry — maps CLI name to weights directory and ONNX path
@@ -168,6 +171,38 @@ def _run_stage(
             flops=flops,
         )
 
+    elif stage in ("5_trt_int8_minmax", "5_trt_int8_entropy", "5_trt_int8_percentile"):
+        cal_method_map = {
+            "5_trt_int8_minmax": "minmax",
+            "5_trt_int8_entropy": "entropy",
+            "5_trt_int8_percentile": "percentile",
+        }
+        cal_method = cal_method_map[stage]
+        onnx_path = Path(MODEL_REGISTRY[model_name]["onnx"])
+        if not onnx_path.exists():
+            msg = f"ONNX model missing: {onnx_path} — run stage 2 first"
+            raise FileNotFoundError(msg)
+
+        # Fixed 500-image calibration dataloader (D-06: first 500 in iteration order)
+        cal_dataloader = COCODataLoader(limit=500)
+
+        engine = TensorRTEngine(
+            model_name=model_name,
+            precision="int8",
+            calibrator_method=cal_method,  # type: ignore[arg-type]
+            engine_dir=engine_dir,
+            force_rebuild=force_rebuild,
+        )
+        engine.load_model(onnx_path, calibration_dataloader=cal_dataloader)
+
+        result = engine.run_full_benchmark(
+            dataloader,
+            stage=stage,
+            baseline_map_50_95=baseline_map,
+            macs=macs,
+            flops=flops,
+        )
+
     else:
         msg = f"Stage '{stage}' not implemented. Available: {STAGE_REGISTRY}"
         raise typer.BadParameter(msg)
@@ -182,7 +217,13 @@ def run_benchmark(
     model: Annotated[str, typer.Option("--model", help="Model name (e.g. rt-detr)")] = "rt-detr",
     stage: Annotated[
         str | None,
-        typer.Option("--stage", help="Stage ID, e.g. 1_pytorch_fp32"),
+        typer.Option(
+            "--stage",
+            help=(
+                "Stage ID or comma-separated list of stage IDs, "
+                "e.g. 5_trt_int8_minmax,5_trt_int8_entropy,5_trt_int8_percentile"
+            ),
+        ),
     ] = None,
     all_stages: Annotated[
         bool,
@@ -230,7 +271,16 @@ def run_benchmark(
     result_logger = ResultLogger(output_dir=resolved_dir, hardware=hw, run_id=run_id)
     typer.echo(f"Run ID: {result_logger.run_id}")
 
-    stages_to_run = STAGE_REGISTRY if all_stages else [stage]  # type: ignore[list-item]
+    if all_stages:
+        stages_to_run: list[str] = STAGE_REGISTRY
+    else:
+        # Support comma-separated stage IDs: --stage a,b,c
+        parsed = [s.strip() for s in stage.split(",") if s.strip()]  # type: ignore[union-attr]
+        unknown = [s for s in parsed if s not in STAGE_REGISTRY]
+        if unknown:
+            msg = f"Unknown stage(s): {unknown}. Available: {STAGE_REGISTRY}"
+            raise typer.BadParameter(msg)
+        stages_to_run = parsed
 
     baseline_map: float = 0.0
     macs: float | None = None
@@ -253,6 +303,9 @@ def run_benchmark(
             # First stage sets the baseline for accuracy_drop_pct
             if s == "1_pytorch_fp32":
                 baseline_map = map_result
+            # After any INT8 stage, update best-calibrator summary (CAL-05)
+            if s in ("5_trt_int8_minmax", "5_trt_int8_entropy", "5_trt_int8_percentile"):
+                result_logger.save_int8_best_calibrator(model)
         except Exception as exc:
             typer.echo(f"Stage {s} failed: {exc}", err=True)
             raise typer.Exit(code=1) from exc

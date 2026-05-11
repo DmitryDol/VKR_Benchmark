@@ -1,7 +1,8 @@
-"""TensorRT inference engine for stages 3-4 benchmarking.
+"""TensorRT inference engine for stages 3-5 benchmarking.
 
-Supports TF32, FP16, and BF16 precision modes via a single class with
-lazy engine building and serialization caching.
+Supports TF32, FP16, BF16, and INT8 precision modes via a single class with
+lazy engine building and serialization caching.  INT8 builds require a
+calibrator (MinMax, Entropy, or Percentile) and a calibration dataloader.
 """
 
 from __future__ import annotations
@@ -42,20 +43,24 @@ class _BF16UnsupportedError(Exception):
 class TensorRTEngine(BaseEngine):
     """TensorRT inference engine with lazy build and precision selection.
 
-    Builds TRT engines from ONNX models in TF32, FP16, or BF16 precision.
+    Builds TRT engines from ONNX models in TF32, FP16, BF16, or INT8 precision.
     Engines are cached to disk and reused on subsequent runs unless
-    ``force_rebuild=True`` is set.
+    ``force_rebuild=True`` is set.  INT8 builds also cache the calibration table
+    to ``{engine_dir}/rtdetr_int8_{calibrator_method}.cache``.
 
     Parameters
     ----------
     model_name : str
         Human-readable model identifier (e.g. "rt-detr").
-    precision : Literal['tf32', 'fp16', 'bf16']
+    precision : Literal['tf32', 'fp16', 'bf16', 'int8']
         TensorRT precision mode.
     engine_dir : Path
         Directory to cache serialized .engine files.
     force_rebuild : bool
         Force engine rebuild even if cached .engine file exists.
+        For INT8, also deletes the calibration cache so calibration reruns.
+    calibrator_method : Literal['minmax', 'entropy', 'percentile'] | None
+        Required when ``precision='int8'``; ignored otherwise.
     score_threshold : float
         Minimum detection confidence for postprocessing.
     """
@@ -63,33 +68,75 @@ class TensorRTEngine(BaseEngine):
     def __init__(
         self,
         model_name: str,
-        precision: Literal["tf32", "fp16", "bf16"],
+        precision: Literal["tf32", "fp16", "bf16", "int8"],
         engine_dir: Path,
         force_rebuild: bool = False,
+        calibrator_method: Literal["minmax", "entropy", "percentile"] | None = None,
         score_threshold: float = 0.01,
     ) -> None:
         super().__init__(model_name, engine_type="tensorrt", precision=precision)
         self._engine_dir = engine_dir
         self._force_rebuild = force_rebuild
+        self._calibrator_method: Literal["minmax", "entropy", "percentile"] | None = (
+            calibrator_method
+        )
         self._score_threshold = score_threshold
-        self._engine_path = engine_dir / f"rtdetr_{precision}.engine"
+
+        if precision == "int8":
+            if calibrator_method is None:
+                msg = "calibrator_method is required when precision='int8'"
+                raise ValueError(msg)
+            self._engine_path = engine_dir / f"rtdetr_int8_{calibrator_method}.engine"
+            self._cache_path: Path | None = engine_dir / f"rtdetr_int8_{calibrator_method}.cache"
+        else:
+            self._engine_path = engine_dir / f"rtdetr_{precision}.engine"
+            self._cache_path = None
+
+        self._calibration_dataloader: COCODataLoader | None = None
         self._runtime: object = None
         self._engine: object = None
         self._context: object = None
+        self._stream: torch.cuda.Stream | None = None
         self._skipped_reason: str = ""
         self._input_name: str = ""
         self._output_names: list[str] = []
         self._output_shapes: list[tuple[int, ...]] = []
 
-    def load_model(self, weights_path: Path) -> None:
+    def load_model(
+        self,
+        weights_path: Path,
+        calibration_dataloader: COCODataLoader | None = None,
+    ) -> None:
         """Load or build TRT engine from ONNX model.
 
         Parameters
         ----------
         weights_path : Path
             Path to the .onnx model file.
+        calibration_dataloader : COCODataLoader | None
+            Required when ``precision='int8'`` and no cached engine exists.
+            Ignored for non-INT8 precisions.
         """
+        self._calibration_dataloader = calibration_dataloader
         self._engine_dir.mkdir(parents=True, exist_ok=True)
+
+        # Force rebuild: delete existing engine AND calibration cache (INT8 only)
+        if self._force_rebuild:
+            if self._engine_path.exists():
+                self._engine_path.unlink()
+                logger.info("Deleted cached engine: %s", self._engine_path)
+            if self._cache_path is not None and self._cache_path.exists():
+                self._cache_path.unlink()
+                logger.info("Deleted calibration cache: %s", self._cache_path)
+
+        # INT8 build guard: calibration data required when engine must be built
+        if (
+            self.precision == "int8"
+            and not self._engine_path.exists()
+            and calibration_dataloader is None
+        ):
+            msg = "calibration_dataloader is required to build an INT8 engine"
+            raise ValueError(msg)
 
         if not self._force_rebuild and self._engine_path.exists():
             logger.info("Loading cached TRT engine: %s", self._engine_path)
@@ -138,9 +185,7 @@ class TensorRTEngine(BaseEngine):
 
         trt_logger = trt.Logger(trt.Logger.WARNING)
         builder = trt.Builder(trt_logger)
-        network = builder.create_network(
-            1 << int(trt.NetworkDefinitionCreationFlag.EXPLICIT_BATCH)
-        )
+        network = builder.create_network(1 << int(trt.NetworkDefinitionCreationFlag.EXPLICIT_BATCH))
         parser = trt.OnnxParser(network, trt_logger)
 
         onnx_data = onnx_path.read_bytes()
@@ -166,8 +211,10 @@ class TensorRTEngine(BaseEngine):
                 msg = "BF16 not supported: platform_has_tf32=False (Ampere sm_80+ required)"
                 raise _BF16UnsupportedError(msg)
             config.set_flag(trt.BuilderFlag.BF16)
+        elif self.precision == "int8":
+            self._apply_int8_config(builder, network, config)
 
-        # Add optimization profile for dynamic batch dimension.
+        # Inference optimization profile (batch=1) — added for all precisions.
         # ONNX was exported with dynamic_axes={0: "batch"}, so TRT
         # needs explicit min/opt/max shapes. Benchmark uses batch=1.
         profile = builder.create_optimization_profile()
@@ -185,9 +232,76 @@ class TensorRTEngine(BaseEngine):
             raise RuntimeError(msg)
 
         self._engine_path.write_bytes(serialized)
-        logger.info(
-            "TRT %s engine built and saved: %s", self.precision, self._engine_path
+        logger.info("TRT %s engine built and saved: %s", self.precision, self._engine_path)
+
+    def _apply_int8_config(
+        self,
+        builder: object,
+        network: object,
+        config: object,
+    ) -> None:
+        """Set INT8 flag, attach calibrator, and add calibration profile (batch=8).
+
+        Parameters
+        ----------
+        builder : trt.Builder
+            TRT builder instance.
+        network : trt.INetworkDefinition
+            Parsed network.
+        config : trt.IBuilderConfig
+            Builder config to mutate.
+
+        Raises
+        ------
+        RuntimeError
+            If any required INT8 attribute is unset (internal guard).
+        """
+        # Local import avoids circular import at module level (TRT optional pattern).
+        from benchmark.engines.int8_calibrators import _make_calibrator  # noqa: PLC0415
+
+        if self._calibrator_method is None:
+            msg = "calibrator_method is None in _apply_int8_config — internal error"
+            raise RuntimeError(msg)
+        if self._calibration_dataloader is None:
+            msg = "calibration_dataloader is None in _apply_int8_config — internal error"
+            raise RuntimeError(msg)
+        if self._cache_path is None:
+            msg = "cache_path is None in _apply_int8_config — internal error"
+            raise RuntimeError(msg)
+
+        calibrator = _make_calibrator(
+            self._calibrator_method,
+            self._calibration_dataloader,
+            self._cache_path,
         )
+
+        # Включение FP16 как Fallback для INT8.
+        # Позволяет не поддерживаемым в INT8 слоям (LayerNorm, Softmax)
+        # аппаратно ускоряться в FP16, а не скатываться в крайне медленный FP32.
+        config.set_flag(trt.BuilderFlag.INT8)  # type: ignore[union-attr]
+        config.set_flag(trt.BuilderFlag.FP16)  # type: ignore[union-attr]
+        config.int8_calibrator = calibrator  # type: ignore[union-attr]
+
+        # CALIBRATE_BEFORE_FUSION: required for IInt8LegacyCalibrator (Percentile).
+        # Without this flag, TRT calibrates after fusing Conv+SiLU into a single
+        # node.  That fused pattern has no INT8 kernel on sm_86 (RTX 30xx), so TRT
+        # raises Error Code 10 ("no implementation for node").
+        # Pre-fusion calibration gives TRT per-op scale data so it can unfuse and
+        # fall back the activation portion to FP16 instead of failing outright.
+        # MinMax/Entropy calibrators (IInt8MinMaxCalibrator / IInt8EntropyCalibrator2)
+        # handle the fused path correctly via their native TRT integration, so this
+        # flag is only set for the legacy percentile path.
+        if self._calibrator_method == "percentile":
+            config.set_quantization_flag(  # type: ignore[union-attr]
+                trt.QuantizationFlag.CALIBRATE_BEFORE_FUSION
+            )
+
+        cal_profile = builder.create_optimization_profile()  # type: ignore[union-attr]
+        for j in range(network.num_inputs):  # type: ignore[union-attr]
+            inp_c = network.get_input(j)  # type: ignore[union-attr]
+            cal_shape = tuple(8 if d == -1 else d for d in inp_c.shape)
+            cal_profile.set_shape(inp_c.name, min=cal_shape, opt=cal_shape, max=cal_shape)
+        config.set_calibration_profile(cal_profile)  # type: ignore[union-attr]
 
     def _load_engine(self) -> None:
         """Deserialize a cached TRT engine from disk.
@@ -207,7 +321,8 @@ class TensorRTEngine(BaseEngine):
         self._engine = self._runtime.deserialize_cuda_engine(data)
         self._context = self._engine.create_execution_context()
 
-        # Cache tensor names and shapes for infer()
+        self._stream = torch.cuda.Stream()
+
         for i in range(self._engine.num_io_tensors):
             name = self._engine.get_tensor_name(i)
             mode = self._engine.get_tensor_mode(name)
@@ -215,9 +330,7 @@ class TensorRTEngine(BaseEngine):
                 self._input_name = name
             else:
                 self._output_names.append(name)
-                self._output_shapes.append(
-                    tuple(self._engine.get_tensor_shape(name))
-                )
+                self._output_shapes.append(tuple(self._engine.get_tensor_shape(name)))
 
         logger.info(
             "TRT engine loaded: %s (%.1f MB)",
@@ -250,7 +363,7 @@ class TensorRTEngine(BaseEngine):
         list[np.ndarray]
             [logits, pred_boxes] matching OnnxRuntimeEngine output format.
         """
-        if self._context is None:
+        if self._context is None or self._stream is None:
             if self._skipped_reason:
                 return []
             msg = "Engine not loaded. Call load_model() first."
@@ -269,10 +382,11 @@ class TensorRTEngine(BaseEngine):
             self._context.set_tensor_address(name, out_gpu.data_ptr())
             output_tensors.append(out_gpu)
 
-        # Execute inference via TRT 10.x async API with CUDA stream
-        stream = torch.cuda.current_stream().cuda_stream
-        self._context.execute_async_v3(stream)
-        torch.cuda.synchronize()
+        # Выполнение в изолированном потоке без блокировки GPU-дефолта
+        self._context.execute_async_v3(self._stream.cuda_stream)
+
+        # Строгая синхронизация только выделенного потока перед копированием
+        self._stream.synchronize()
 
         # Copy outputs to CPU
         return [t.cpu().numpy() for t in output_tensors]
