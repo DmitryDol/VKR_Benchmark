@@ -178,6 +178,13 @@ class PercentileCalibrator(_BASE_LEGACY):  # type: ignore[misc]
     ``get_algorithm()`` is intentionally NOT overridden — the default matches
     ``CalibrationAlgoType.ENTROPY_CALIBRATION``, which is correct for this use.
 
+    ``IInt8LegacyCalibrator`` declares two additional pure virtual methods beyond
+    the standard calibration cache pair: ``read_histogram_cache`` and
+    ``write_histogram_cache``.  These must be overridden or TRT crashes with
+    "Tried to call pure virtual function".  We do not persist histograms
+    (the calibration table cache is sufficient), so read returns ``None`` and
+    write is a no-op.
+
     Parameters
     ----------
     data : list[torch.Tensor]
@@ -195,6 +202,8 @@ class PercentileCalibrator(_BASE_LEGACY):  # type: ignore[misc]
         # pybind11 property assignments — required for IInt8LegacyCalibrator
         self.quantile: float = 0.9999
         self.regression_cutoff: float = 1.0
+        self._quantile: float = 0.9999
+        self._regression_cutoff: float = 1.0
 
     def get_batch_size(self) -> int:
         """Return calibration batch size."""
@@ -224,6 +233,31 @@ class PercentileCalibrator(_BASE_LEGACY):  # type: ignore[misc]
         self._cache_path.parent.mkdir(parents=True, exist_ok=True)
         self._cache_path.write_bytes(cache)
         logger.info("Calibration cache written: %s", self._cache_path)
+
+    # --- IInt8LegacyCalibrator Pure Virtual Overrides ---
+
+    def get_quantile(self) -> float:
+        """Provide quantile value to TRT optimizer."""
+        return self._quantile
+
+    def get_regression_cutoff(self) -> float:
+        """Provide regression cutoff value to TRT optimizer."""
+        return self._regression_cutoff
+
+    def read_histogram_cache(self, length: int) -> bytes | None:  # noqa: ARG002
+        """Override IInt8LegacyCalibrator pure virtual — histogram persistence unused.
+
+        TRT calls this before calibration to check for a saved histogram.
+        Returning ``None`` forces TRT to recompute histograms from get_batch().
+        """
+        return None
+
+    def write_histogram_cache(self, ptr: int, length: int) -> None:  # noqa: ARG002
+        """Override IInt8LegacyCalibrator pure virtual — histogram persistence unused.
+
+        TRT calls this after calibration to save histograms. No-op: the
+        calibration table written by write_calibration_cache() is sufficient.
+        """
 
 
 def _make_calibrator(
