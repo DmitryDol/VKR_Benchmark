@@ -203,18 +203,18 @@ class BaseEngine(ABC):
 
         stats = coco_eval.stats
         return {
-            "map_50_95": float(stats[0]),   # AP @ IoU=0.50:0.95  (D-11)
-            "map_50": float(stats[1]),      # AP @ IoU=0.50
-            "map_75": float(stats[2]),      # AP @ IoU=0.75
-            "map_small": float(stats[3]),   # AP, area=small
+            "map_50_95": float(stats[0]),  # AP @ IoU=0.50:0.95  (D-11)
+            "map_50": float(stats[1]),  # AP @ IoU=0.50
+            "map_75": float(stats[2]),  # AP @ IoU=0.75
+            "map_small": float(stats[3]),  # AP, area=small
             "map_medium": float(stats[4]),  # AP, area=medium
-            "map_large": float(stats[5]),   # AP, area=large
-            "ar_1": float(stats[6]),        # AR @ maxDets=1
-            "ar_10": float(stats[7]),       # AR @ maxDets=10
-            "ar_100": float(stats[8]),      # AR @ maxDets=100
-            "ar_small": float(stats[9]),    # AR, area=small
+            "map_large": float(stats[5]),  # AP, area=large
+            "ar_1": float(stats[6]),  # AR @ maxDets=1
+            "ar_10": float(stats[7]),  # AR @ maxDets=10
+            "ar_100": float(stats[8]),  # AR @ maxDets=100
+            "ar_small": float(stats[9]),  # AR, area=small
             "ar_medium": float(stats[10]),  # AR, area=medium
-            "ar_large": float(stats[11]),   # AR, area=large
+            "ar_large": float(stats[11]),  # AR, area=large
         }
 
     def measure_vram(self) -> float:
