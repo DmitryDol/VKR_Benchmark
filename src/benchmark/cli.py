@@ -37,6 +37,9 @@ STAGE_REGISTRY: list[str] = [
     "3_trt_tf32",
     "4_trt_fp16",
     "4_trt_bf16",
+    "5_trt_int8_minmax",
+    "5_trt_int8_entropy",
+    "5_trt_int8_percentile",
 ]
 
 # Model registry — maps CLI name to weights directory and ONNX path
@@ -159,6 +162,38 @@ def _run_stage(
             force_rebuild=force_rebuild,
         )
         engine.load_model(onnx_path)
+
+        result = engine.run_full_benchmark(
+            dataloader,
+            stage=stage,
+            baseline_map_50_95=baseline_map,
+            macs=macs,
+            flops=flops,
+        )
+
+    elif stage in ("5_trt_int8_minmax", "5_trt_int8_entropy", "5_trt_int8_percentile"):
+        cal_method_map = {
+            "5_trt_int8_minmax": "minmax",
+            "5_trt_int8_entropy": "entropy",
+            "5_trt_int8_percentile": "percentile",
+        }
+        cal_method = cal_method_map[stage]
+        onnx_path = Path(MODEL_REGISTRY[model_name]["onnx"])
+        if not onnx_path.exists():
+            msg = f"ONNX model missing: {onnx_path} — run stage 2 first"
+            raise FileNotFoundError(msg)
+
+        # Fixed 500-image calibration dataloader (D-06: first 500 in iteration order)
+        cal_dataloader = COCODataLoader(limit=500)
+
+        engine = TensorRTEngine(
+            model_name=model_name,
+            precision="int8",
+            calibrator_method=cal_method,  # type: ignore[arg-type]
+            engine_dir=engine_dir,
+            force_rebuild=force_rebuild,
+        )
+        engine.load_model(onnx_path, calibration_dataloader=cal_dataloader)
 
         result = engine.run_full_benchmark(
             dataloader,
