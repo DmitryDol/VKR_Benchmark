@@ -73,6 +73,7 @@ class TensorRTEngine(BaseEngine):
         force_rebuild: bool = False,
         calibrator_method: Literal["minmax", "entropy", "percentile"] | None = None,
         score_threshold: float = 0.01,
+        mixed_strategy: Literal["a", "b"] | None = None,
     ) -> None:
         super().__init__(model_name, engine_type="tensorrt", precision=precision)
         self._engine_dir = engine_dir
@@ -81,12 +82,16 @@ class TensorRTEngine(BaseEngine):
             calibrator_method
         )
         self._score_threshold = score_threshold
+        self._mixed_strategy: Literal["a", "b"] | None = mixed_strategy
 
         if precision == "int8":
             if calibrator_method is None:
                 msg = "calibrator_method is required when precision='int8'"
                 raise ValueError(msg)
-            self._engine_path = engine_dir / f"rtdetr_int8_{calibrator_method}.engine"
+            if mixed_strategy is not None:
+                self._engine_path = engine_dir / f"rtdetr_mixed_{mixed_strategy}_{calibrator_method}.engine"
+            else:
+                self._engine_path = engine_dir / f"rtdetr_int8_{calibrator_method}.engine"
             self._cache_path: Path | None = engine_dir / f"rtdetr_int8_{calibrator_method}.cache"
         else:
             self._engine_path = engine_dir / f"rtdetr_{precision}.engine"
@@ -213,6 +218,14 @@ class TensorRTEngine(BaseEngine):
             config.set_flag(trt.BuilderFlag.BF16)
         elif self.precision == "int8":
             self._apply_int8_config(builder, network, config)
+            if self._mixed_strategy:
+                config.set_flag(trt.BuilderFlag.OBEY_PRECISION_CONSTRAINTS)
+                from benchmark.engines.mixed_precision import apply_strategy_a, apply_strategy_b
+                if self._mixed_strategy == "a":
+                    count = apply_strategy_a(network)
+                elif self._mixed_strategy == "b":
+                    count = apply_strategy_b(network)
+                logger.info("Strategy %s: %d layers set to FP16", self._mixed_strategy.upper(), count)
 
         # Inference optimization profile (batch=1) — added for all precisions.
         # ONNX was exported with dynamic_axes={0: "batch"}, so TRT
