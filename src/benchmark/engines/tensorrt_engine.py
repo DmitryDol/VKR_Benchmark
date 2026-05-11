@@ -96,6 +96,7 @@ class TensorRTEngine(BaseEngine):
         self._runtime: object = None
         self._engine: object = None
         self._context: object = None
+        self._stream: torch.cuda.Stream | None = None
         self._skipped_reason: str = ""
         self._input_name: str = ""
         self._output_names: list[str] = []
@@ -273,12 +274,28 @@ class TensorRTEngine(BaseEngine):
             self._calibration_dataloader,
             self._cache_path,
         )
+
+        # Включение FP16 как Fallback для INT8.
+        # Позволяет не поддерживаемым в INT8 слоям (LayerNorm, Softmax)
+        # аппаратно ускоряться в FP16, а не скатываться в крайне медленный FP32.
         config.set_flag(trt.BuilderFlag.INT8)  # type: ignore[union-attr]
+        config.set_flag(trt.BuilderFlag.FP16)  # type: ignore[union-attr]
         config.int8_calibrator = calibrator  # type: ignore[union-attr]
 
-        # Calibration profile (batch=8) — separate from the inference profile.
-        # Required by TRT when calibrating networks with dynamic shapes (D-05).
-        # "MIN and MAX are overwritten by OPT" — only OPT shape matters.
+        # CALIBRATE_BEFORE_FUSION: required for IInt8LegacyCalibrator (Percentile).
+        # Without this flag, TRT calibrates after fusing Conv+SiLU into a single
+        # node.  That fused pattern has no INT8 kernel on sm_86 (RTX 30xx), so TRT
+        # raises Error Code 10 ("no implementation for node").
+        # Pre-fusion calibration gives TRT per-op scale data so it can unfuse and
+        # fall back the activation portion to FP16 instead of failing outright.
+        # MinMax/Entropy calibrators (IInt8MinMaxCalibrator / IInt8EntropyCalibrator2)
+        # handle the fused path correctly via their native TRT integration, so this
+        # flag is only set for the legacy percentile path.
+        if self._calibrator_method == "percentile":
+            config.set_quantization_flag(  # type: ignore[union-attr]
+                trt.QuantizationFlag.CALIBRATE_BEFORE_FUSION
+            )
+
         cal_profile = builder.create_optimization_profile()  # type: ignore[union-attr]
         for j in range(network.num_inputs):  # type: ignore[union-attr]
             inp_c = network.get_input(j)  # type: ignore[union-attr]
@@ -304,7 +321,8 @@ class TensorRTEngine(BaseEngine):
         self._engine = self._runtime.deserialize_cuda_engine(data)
         self._context = self._engine.create_execution_context()
 
-        # Cache tensor names and shapes for infer()
+        self._stream = torch.cuda.Stream()
+
         for i in range(self._engine.num_io_tensors):
             name = self._engine.get_tensor_name(i)
             mode = self._engine.get_tensor_mode(name)
@@ -345,7 +363,7 @@ class TensorRTEngine(BaseEngine):
         list[np.ndarray]
             [logits, pred_boxes] matching OnnxRuntimeEngine output format.
         """
-        if self._context is None:
+        if self._context is None or self._stream is None:
             if self._skipped_reason:
                 return []
             msg = "Engine not loaded. Call load_model() first."
@@ -364,10 +382,11 @@ class TensorRTEngine(BaseEngine):
             self._context.set_tensor_address(name, out_gpu.data_ptr())
             output_tensors.append(out_gpu)
 
-        # Execute inference via TRT 10.x async API with CUDA stream
-        stream = torch.cuda.current_stream().cuda_stream
-        self._context.execute_async_v3(stream)
-        torch.cuda.synchronize()
+        # Выполнение в изолированном потоке без блокировки GPU-дефолта
+        self._context.execute_async_v3(self._stream.cuda_stream)
+
+        # Строгая синхронизация только выделенного потока перед копированием
+        self._stream.synchronize()
 
         # Copy outputs to CPU
         return [t.cpu().numpy() for t in output_tensors]
