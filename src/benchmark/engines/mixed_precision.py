@@ -1,8 +1,9 @@
 """
 Mixed precision strategies for TensorRT optimization.
 """
-import tensorrt as trt
 import logging
+
+import tensorrt as trt
 
 logger = logging.getLogger(__name__)
 
@@ -16,13 +17,13 @@ def apply_strategy_a(network: trt.INetworkDefinition) -> int:
     """
     global_inputs = {network.get_input(i).name for i in range(network.num_inputs)}
     global_outputs = {network.get_output(i).name for i in range(network.num_outputs)}
-    
+
     count = 0
     for i in range(network.num_layers):
         layer = network.get_layer(i)
         if is_constant_or_shape(layer):
             continue
-            
+
         is_boundary = False
         # Check inputs
         for j in range(layer.num_inputs):
@@ -30,7 +31,7 @@ def apply_strategy_a(network: trt.INetworkDefinition) -> int:
             if inp and inp.name in global_inputs:
                 is_boundary = True
                 break
-                
+
         # Check outputs
         if not is_boundary:
             for j in range(layer.num_outputs):
@@ -38,12 +39,12 @@ def apply_strategy_a(network: trt.INetworkDefinition) -> int:
                 if out and out.name in global_outputs:
                     is_boundary = True
                     break
-                    
+
         if is_boundary:
             layer.precision = trt.float16
             layer.set_output_type(0, trt.float16)
             count += 1
-            
+
     return count
 
 def apply_strategy_b(network: trt.INetworkDefinition) -> int:
@@ -55,10 +56,10 @@ def apply_strategy_b(network: trt.INetworkDefinition) -> int:
         layer = network.get_layer(i)
         if is_constant_or_shape(layer):
             continue
-            
+
         if layer.type == trt.LayerType.SOFTMAX or "norm" in layer.name.lower():
             layer.precision = trt.float16
             layer.set_output_type(0, trt.float16)
             count += 1
-            
+
     return count

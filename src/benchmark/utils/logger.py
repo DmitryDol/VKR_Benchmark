@@ -283,7 +283,7 @@ class ResultLogger:
         unified_json.write_text(
             json.dumps(all_rows, indent=2, ensure_ascii=False), encoding="utf-8"
         )
-        
+
         # Extract best stage
         best_stage = ""
         cal_file = model_dir / "int8_best_calibrator.json"
@@ -292,18 +292,18 @@ class ResultLogger:
                 best_stage = json.loads(cal_file.read_text(encoding="utf-8")).get("best_stage", "")
             except Exception:
                 pass
-                
+
         # Format text and markdown summaries
         txt_path = self.output_dir / "summary.txt"
         md_path = self.output_dir / "summary.md"
-        
+
         headers = ["Stage", "mAP@50:95", "Latency (ms)", "FPS", "Drop %", "Size (MB)"]
         rows = []
         for r in all_rows:
             st = str(r.get("stage", ""))
             if st == best_stage and best_stage:
                 st += " ★"
-            
+
             def fmt(val: object, dec: int) -> str:
                 try:
                     f = float(val)  # type: ignore[arg-type]
@@ -311,7 +311,7 @@ class ResultLogger:
                     return f"{f:.{dec}f}"
                 except (ValueError, TypeError):
                     return str(val)
-                    
+
             rows.append([
                 st,
                 fmt(r.get("map_50_95"), 3),
@@ -320,16 +320,16 @@ class ResultLogger:
                 fmt(r.get("accuracy_drop_pct"), 1),
                 fmt(r.get("model_size_mb"), 1)
             ])
-            
+
         # Write summary.txt
-        col_widths = [max(len(str(item)) for item in col) for col in zip(headers, *rows)]
+        col_widths = [max(len(str(item)) for item in col) for col in zip(headers, *rows, strict=False)]
         txt_lines = []
-        txt_lines.append(" | ".join(h.ljust(w) for h, w in zip(headers, col_widths)))
+        txt_lines.append(" | ".join(h.ljust(w) for h, w in zip(headers, col_widths, strict=False)))
         txt_lines.append("-+-".join("-" * w for w in col_widths))
         for row in rows:
-            txt_lines.append(" | ".join(str(item).ljust(w) for item, w in zip(row, col_widths)))
+            txt_lines.append(" | ".join(str(item).ljust(w) for item, w in zip(row, col_widths, strict=False)))
         txt_path.write_text("\n".join(txt_lines) + "\n", encoding="utf-8")
-        
+
         # Write summary.md
         md_lines = []
         md_lines.append("| " + " | ".join(headers) + " |")

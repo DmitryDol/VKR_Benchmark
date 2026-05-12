@@ -144,7 +144,7 @@ class PyTorchEngine(BaseEngine):
         h, w = self._adapter.input_size
         img = Image.fromarray(sample.image).resize((w, h), Image.BILINEAR)
         tensor = tvf.to_tensor(img)  # (3, H, W) float32 [0, 1]
-        
+
         # NOTE: Individual adapters may expect different normalization.
         # Preprocessing here is kept generic (standard tensor conversion).
         return tensor.unsqueeze(0).to(self._device)

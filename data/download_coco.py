@@ -5,9 +5,9 @@ Used for benchmarking Vision Transformer models (mAP, latency).
 
 import os
 import sys
-import zipfile
-import urllib.request
 import time
+import urllib.request
+import zipfile
 
 DATA_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -92,10 +92,10 @@ def main():
 
         # Skip if already extracted
         if filename == "val2017.zip" and os.path.isdir(val_dir):
-            print(f"[SKIP] val2017/ already exists")
+            print("[SKIP] val2017/ already exists")
             continue
         if filename == "annotations_trainval2017.zip" and os.path.isdir(ann_dir):
-            print(f"[SKIP] annotations/ already exists")
+            print("[SKIP] annotations/ already exists")
             continue
 
         download_with_progress(info["url"], filepath, info["desc"])

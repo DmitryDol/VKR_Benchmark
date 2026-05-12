@@ -252,7 +252,7 @@ class PercentileCalibrator(_BASE_LEGACY):  # type: ignore[misc]
         """
         return None
 
-    def write_histogram_cache(self, ptr: int, length: int) -> None:  # noqa: ARG002
+    def write_histogram_cache(self, ptr: int, length: int) -> None:
         """Override IInt8LegacyCalibrator pure virtual — histogram persistence unused.
 
         TRT calls this after calibration to save histograms. No-op: the

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-import numpy as np
 import pytest
 import torch
 
@@ -36,13 +35,13 @@ def test_load_calls_ultralytics_yolo(mock_yolo: MagicMock) -> None:
     adapter = YOLOAdapter()
     weights_path = "weights/yolo11l.pt"
     device = torch.device("cpu")
-    
+
     # Setup mock
     mock_model_instance = MagicMock()
     mock_yolo.return_value = mock_model_instance
-    
+
     adapter.load(weights_path, device)
-    
+
     mock_yolo.assert_called_once_with(str(weights_path))
     mock_model_instance.to.assert_called_once_with(device)
 
@@ -60,14 +59,14 @@ def test_parse_nms_outputs(nms_adapter: YOLOAdapter) -> None:
     raw_outputs[0, 2, 0] = 50.0   # w
     raw_outputs[0, 3, 0] = 50.0   # h
     raw_outputs[0, 4 + 5, 0] = 1.0  # Class 5 (bus) score=1.0
-    
+
     detection = nms_adapter.parse_outputs(
-        raw_outputs, 
-        original_size=(480, 640), 
-        input_size=(640, 640), 
+        raw_outputs,
+        original_size=(480, 640),
+        input_size=(640, 640),
         score_threshold=0.5
     )
-    
+
     assert isinstance(detection, Detection)
     assert len(detection.scores) > 0
     assert detection.labels[0] == 6  # COCO-80 index 5 -> COCO-91 ID 6
@@ -84,14 +83,14 @@ def test_parse_nms_free_outputs(nms_free_adapter: YOLOAdapter) -> None:
     # [x1, y1, x2, y2, conf, cls]
     raw_outputs = torch.zeros((1, 300, 6))
     raw_outputs[0, 0] = torch.tensor([10.0, 20.0, 110.0, 120.0, 0.9, 0.0]) # Class 0 -> COCO-91 ID 1 (person)
-    
+
     detection = nms_free_adapter.parse_outputs(
-        raw_outputs, 
-        original_size=(480, 640), 
-        input_size=(640, 640), 
+        raw_outputs,
+        original_size=(480, 640),
+        input_size=(640, 640),
         score_threshold=0.5
     )
-    
+
     assert len(detection.scores) == 1
     assert detection.labels[0] == 1
     assert detection.scores[0] == 0.9
@@ -107,9 +106,9 @@ def test_empty_outputs(nms_adapter: YOLOAdapter) -> None:
     """parse_outputs() handles empty results gracefully."""
     raw_outputs = torch.zeros((1, 84, 100)) # All scores 0
     detection = nms_adapter.parse_outputs(
-        raw_outputs, 
-        original_size=(480, 640), 
-        input_size=(640, 640), 
+        raw_outputs,
+        original_size=(480, 640),
+        input_size=(640, 640),
         score_threshold=0.5
     )
     assert len(detection.scores) == 0

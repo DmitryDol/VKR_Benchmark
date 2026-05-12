@@ -76,7 +76,7 @@ def download_yolo_weights(weights_dir: Path = YOLO_DIR) -> list[Path]:
         model_slug = model_name.split(".")[0]
         model_subdir = weights_dir / model_slug
         model_subdir.mkdir(parents=True, exist_ok=True)
-        
+
         weight_path = model_subdir / model_name
         if weight_path.exists():
             logger.info("YOLO weights already present at %s — skipping.", weight_path)

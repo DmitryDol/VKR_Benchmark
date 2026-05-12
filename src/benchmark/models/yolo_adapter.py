@@ -67,7 +67,7 @@ class YOLOAdapter:
         """
         if self._is_nms_free:
             return self._parse_nms_free(raw_outputs, original_size, input_size, score_threshold)
-        
+
         return self._parse_nms(raw_outputs, original_size, input_size, score_threshold)
 
     def _parse_nms(
@@ -80,7 +80,7 @@ class YOLOAdapter:
         """Post-process YOLO11 outputs with NMS."""
         # raw_outputs for YOLO11 is typically [tensor(1, 84, 8400)]
         preds = raw_outputs[0] if isinstance(raw_outputs, list) else raw_outputs
-        
+
         # Apply NMS
         # conf_thres=score_threshold, iou_thres=0.7 (default)
         results = non_max_suppression(
@@ -100,13 +100,13 @@ class YOLOAdapter:
         # Scale boxes to original size
         img_h, img_w = original_size
         in_h, in_w = input_size
-        
+
         boxes = results[:, :4]
         # YOLO boxes are in input_size coordinates
         # Simple scaling
         boxes[:, [0, 2]] *= (img_w / in_w)
         boxes[:, [1, 3]] *= (img_h / in_h)
-        
+
         scores = results[:, 4].cpu().numpy()
         labels_80 = results[:, 5].cpu().numpy().astype(np.int64)
         labels_91 = np.array([COCO_80_TO_91[idx] for idx in labels_80], dtype=np.int64)
@@ -135,7 +135,7 @@ class YOLOAdapter:
         # Squeeze leading dimensions if necessary
         while preds.ndim > 2:
             preds = preds[0]
-        
+
         mask = preds[:, 4] > score_threshold
         results = preds[mask]
 
@@ -148,11 +148,11 @@ class YOLOAdapter:
 
         img_h, img_w = original_size
         in_h, in_w = input_size
-        
+
         boxes = results[:, :4]
         boxes[:, [0, 2]] *= (img_w / in_w)
         boxes[:, [1, 3]] *= (img_h / in_h)
-        
+
         scores = results[:, 4].cpu().numpy()
         labels_80 = results[:, 5].cpu().numpy().astype(np.int64)
         labels_91 = np.array([COCO_80_TO_91[idx] for idx in labels_80], dtype=np.int64)

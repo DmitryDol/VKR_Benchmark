@@ -13,16 +13,16 @@ from benchmark.engines.base import WARMUP_RUNS, BaseEngine, Detection
 class ConcreteEngine(BaseEngine):
     """Minimal concrete subclass for testing abstract BaseEngine."""
 
-    def load_model(self, weights_path):  # noqa: ANN001
+    def load_model(self, weights_path):
         pass
 
-    def preprocess(self, sample):  # noqa: ANN001
+    def preprocess(self, sample):
         return torch.zeros(1, 3, 640, 640)
 
-    def infer(self, inputs):  # noqa: ANN001
+    def infer(self, inputs):
         return MagicMock()
 
-    def postprocess(self, raw_outputs, sample):  # noqa: ANN001
+    def postprocess(self, raw_outputs, sample):
         return Detection(
             boxes=np.zeros((0, 4), dtype=np.float32),
             scores=np.zeros(0, dtype=np.float32),
@@ -34,14 +34,14 @@ class ConcreteEngine(BaseEngine):
         return 0.0
 
 
-def test_warmup_calls_infer_exactly_once_per_iteration(dummy_sample):  # noqa: ANN001
+def test_warmup_calls_infer_exactly_once_per_iteration(dummy_sample):
     """FIX-01: warm-up loop must call infer() exactly once per iteration."""
     engine = ConcreteEngine("test", "pytorch", "fp32")
 
     infer_call_count = 0
     original_infer = engine.infer
 
-    def counting_infer(inputs):  # noqa: ANN001
+    def counting_infer(inputs):
         nonlocal infer_call_count
         infer_call_count += 1
         return original_infer(inputs)
@@ -65,7 +65,7 @@ def test_warmup_calls_infer_exactly_once_per_iteration(dummy_sample):  # noqa: A
 
     measurement_started = False
 
-    def side_effect_sync():  # noqa: ANN202
+    def side_effect_sync():
         nonlocal measurement_started
         measurement_started = True
         # Raise after sync that starts measurement, to short-circuit measurement loop.
@@ -76,7 +76,7 @@ def test_warmup_calls_infer_exactly_once_per_iteration(dummy_sample):  # noqa: A
 
     original_sync = torch.cuda.synchronize
 
-    def counting_sync():  # noqa: ANN202
+    def counting_sync():
         nonlocal sync_call_count
         sync_call_count += 1
         # The post-warmup sync (sync_call_count == 1) should stop execution.
