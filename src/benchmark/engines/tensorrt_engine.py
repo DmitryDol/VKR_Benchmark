@@ -15,8 +15,8 @@ import numpy as np
 import torch
 from PIL import Image
 
-from benchmark.data.coco_loader import COCO_80_TO_91
 from benchmark.engines.base import MEASURE_RUNS, WARMUP_RUNS, BaseEngine, Detection
+from benchmark.engines.pytorch_engine import ModelAdapter
 from benchmark.utils.logger import BenchmarkResult
 
 try:
@@ -57,6 +57,8 @@ class TensorRTEngine(BaseEngine):
         TensorRT precision mode.
     engine_dir : Path
         Directory to cache serialized .engine files.
+    adapter : ModelAdapter
+        Model-specific adapter for loading and output parsing.
     force_rebuild : bool
         Force engine rebuild even if cached .engine file exists.
         For INT8, also deletes the calibration cache so calibration reruns.
@@ -71,12 +73,14 @@ class TensorRTEngine(BaseEngine):
         model_name: str,
         precision: Literal["tf32", "fp16", "bf16", "int8"],
         engine_dir: Path,
+        adapter: ModelAdapter,
         force_rebuild: bool = False,
         calibrator_method: Literal["minmax", "entropy", "percentile"] | None = None,
         score_threshold: float = 0.01,
         mixed_strategy: Literal["a", "b"] | None = None,
     ) -> None:
         super().__init__(model_name, engine_type="tensorrt", precision=precision)
+        self._adapter = adapter
         self._engine_dir = engine_dir
         self._force_rebuild = force_rebuild
         self._calibrator_method: Literal["minmax", "entropy", "percentile"] | None = (
@@ -364,12 +368,11 @@ class TensorRTEngine(BaseEngine):
             logger.warning("Failed to analyze engine precision: %s", e)
 
     def preprocess(self, sample: COCOSample) -> np.ndarray:
-        """Resize image and convert to (1, 3, H, W) float32 numpy array.
+        """Resize image and convert to model input tensor using adapter.
 
-        Matches OnnxRuntimeEngine preprocessing: resize to 640x640,
-        scale to [0, 1], no ImageNet normalization (RT-DETR convention).
+        Returns (1, 3, H, W) float32 numpy array.
         """
-        h, w = _INPUT_SIZE
+        h, w = self._adapter.input_size
         img = Image.fromarray(sample.image).resize((w, h), Image.BILINEAR)
         arr = np.array(img, dtype=np.float32) / 255.0  # HWC, [0, 1]
         arr = arr.transpose(2, 0, 1)  # CHW
@@ -386,7 +389,7 @@ class TensorRTEngine(BaseEngine):
         Returns
         -------
         list[np.ndarray]
-            [logits, pred_boxes] matching OnnxRuntimeEngine output format.
+            List of output tensors from the engine.
         """
         if self._context is None or self._stream is None:
             if self._skipped_reason:
@@ -417,58 +420,21 @@ class TensorRTEngine(BaseEngine):
         return [t.cpu().numpy() for t in output_tensors]
 
     def postprocess(self, raw_outputs: object, sample: COCOSample) -> Detection:
-        """Parse TRT RT-DETR outputs to Detection.
+        """Delegate to adapter for model-specific output parsing.
 
-        RT-DETR model outputs two tensors:
-          - logits: (1, num_queries, num_classes)
-          - pred_boxes: (1, num_queries, 4) in [cx, cy, w, h] normalized
-
-        Identical to OnnxRuntimeEngine.postprocess.
+        Parameters
+        ----------
+        raw_outputs : object
+            List of numpy arrays from inference.
+        sample : COCOSample
+            Original image metadata.
         """
-        if not isinstance(raw_outputs, list) or len(raw_outputs) < _MIN_TRT_OUTPUTS:
-            msg = f"Unexpected TRT output format: {type(raw_outputs)}"
-            raise RuntimeError(msg)
-
-        logits: np.ndarray = raw_outputs[0][0]  # (num_queries, num_classes)
-        pred_boxes: np.ndarray = raw_outputs[1][0]  # (num_queries, 4) cx cy w h norm
-
-        # Softmax scores + argmax labels
-        exp_logits = np.exp(logits - logits.max(axis=-1, keepdims=True))
-        probs = exp_logits / exp_logits.sum(axis=-1, keepdims=True)
-        scores = probs.max(axis=-1)  # (num_queries,)
-        labels = probs.argmax(axis=-1).astype(np.int64)  # (num_queries,)
-
-        # Filter by score threshold
-        keep = scores >= self._score_threshold
-        scores = scores[keep]
-        labels = labels[keep]
-        boxes_norm = pred_boxes[keep]  # (N, 4) cx cy w h normalized
-
-        # Convert cx cy w h -> x1 y1 x2 y2 in original pixel space
-        orig_h, orig_w = sample.original_size
-        cx, cy, w, h = (
-            boxes_norm[:, 0] * orig_w,
-            boxes_norm[:, 1] * orig_h,
-            boxes_norm[:, 2] * orig_w,
-            boxes_norm[:, 3] * orig_h,
+        return self._adapter.parse_outputs(
+            raw_outputs,
+            original_size=sample.original_size,
+            input_size=self._adapter.input_size,
+            score_threshold=self._score_threshold,
         )
-        x1 = cx - w / 2
-        y1 = cy - h / 2
-        x2 = cx + w / 2
-        y2 = cy + h / 2
-        boxes = np.stack([x1, y1, x2, y2], axis=1).astype(np.float32)
-
-        # Labels from model are 0-indexed (80 classes) -> map to COCO 91-class IDs
-        coco_labels = np.array(
-            [COCO_80_TO_91.get(int(lbl), int(lbl)) for lbl in labels], dtype=np.int64
-        )
-
-        return Detection(
-            boxes=boxes.reshape(-1, 4),
-            scores=scores.astype(np.float32),
-            labels=coco_labels,
-        )
-
     @property
     def model_size_mb(self) -> float:
         """TRT engine file size in MB."""

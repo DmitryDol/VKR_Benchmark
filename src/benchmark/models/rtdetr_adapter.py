@@ -226,12 +226,15 @@ class RTDETRAdapter:
         input_size: tuple[int, int],  # noqa: ARG002
         score_threshold: float,
     ) -> Detection:
-        """Convert RTDetrObjectDetectionOutput to Detection.
+        """Convert raw model outputs to Detection.
+
+        Handles both RTDetrObjectDetectionOutput (PyTorch) and
+        list[np.ndarray] (ONNX/TRT).
 
         Parameters
         ----------
         raw_outputs : object
-            RTDetrObjectDetectionOutput with .logits and .pred_boxes.
+            Raw model forward pass output.
         original_size : tuple[int, int]
             Original image (height, width) for pixel coordinate scaling.
         input_size : tuple[int, int]
@@ -246,9 +249,14 @@ class RTDETRAdapter:
             scores: (N,) float32 in [0, 1]
             labels: (N,) int64 COCO-91 category IDs (mapped from COCO-80 via LUT)
         """
-        # Access HF output attributes — tensors on the model's device.
-        logits: torch.Tensor = raw_outputs.logits[0]  # type: ignore[union-attr]  # (300, 80)
-        pred_boxes: torch.Tensor = raw_outputs.pred_boxes[0]  # type: ignore[union-attr]  # (300, 4)
+        # Handle ONNX/TRT list outputs by converting to tensors
+        if isinstance(raw_outputs, (list, tuple)):
+            logits = torch.from_numpy(raw_outputs[0])[0]  # (300, 80)
+            pred_boxes = torch.from_numpy(raw_outputs[1])[0]  # (300, 4)
+        else:
+            # Access HF output attributes — tensors on the model's device.
+            logits = raw_outputs.logits[0]  # type: ignore[union-attr]  # (300, 80)
+            pred_boxes = raw_outputs.pred_boxes[0]  # type: ignore[union-attr]  # (300, 4)
 
         # No background class — model outputs 80 COCO classes directly.
         scores_all = torch.sigmoid(logits)  # (300, 80)

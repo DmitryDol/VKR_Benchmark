@@ -9,8 +9,8 @@ import numpy as np
 import onnxruntime as ort
 from PIL import Image
 
-from benchmark.data.coco_loader import COCO_80_TO_91
 from benchmark.engines.base import BaseEngine, Detection
+from benchmark.engines.pytorch_engine import ModelAdapter
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -45,10 +45,12 @@ class OnnxRuntimeEngine(BaseEngine):
         self,
         model_name: str,
         onnx_path: Path,
+        adapter: ModelAdapter,
         input_size: tuple[int, int] = (640, 640),
         score_threshold: float = 0.01,
     ) -> None:
         super().__init__(model_name, engine_type="onnx", precision="fp32")
+        self._adapter = adapter
         self._onnx_path = onnx_path
         self._input_size = input_size
         self._score_threshold = score_threshold
@@ -89,12 +91,11 @@ class OnnxRuntimeEngine(BaseEngine):
         )
 
     def preprocess(self, sample: COCOSample) -> np.ndarray:
-        """Resize image and convert to (1, 3, H, W) float32 numpy array.
+        """Resize image and convert to model input tensor using adapter.
 
-        Matches PyTorchEngine preprocessing: resize to input_size, scale
-        to [0, 1], no ImageNet normalization (RT-DETR convention).
+        Returns (1, 3, H, W) float32 numpy array.
         """
-        h, w = self._input_size
+        h, w = self._adapter.input_size
         img = Image.fromarray(sample.image).resize((w, h), Image.BILINEAR)
         arr = np.array(img, dtype=np.float32) / 255.0  # HWC, [0, 1]
         arr = arr.transpose(2, 0, 1)  # CHW
@@ -115,56 +116,20 @@ class OnnxRuntimeEngine(BaseEngine):
         return self._session.run(None, {input_name: inputs})
 
     def postprocess(self, raw_outputs: object, sample: COCOSample) -> Detection:
-        """Parse ONNX RT-DETR outputs to Detection.
+        """Delegate to adapter for model-specific output parsing.
 
-        RT-DETR ONNX model outputs two tensors:
-          - logits: (1, num_queries, num_classes)
-          - pred_boxes: (1, num_queries, 4) in [cx, cy, w, h] normalized
-
-        This matches the HuggingFace RT-DETR ONNX export convention from Phase 1.
+        Parameters
+        ----------
+        raw_outputs : object
+            List of numpy arrays from session.run().
+        sample : COCOSample
+            Original image metadata.
         """
-        if not isinstance(raw_outputs, list) or len(raw_outputs) < _MIN_ONNX_OUTPUTS:
-            msg = f"Unexpected ONNX output format: {type(raw_outputs)}"
-            raise RuntimeError(msg)
-
-        logits: np.ndarray = raw_outputs[0][0]  # (num_queries, num_classes)
-        pred_boxes: np.ndarray = raw_outputs[1][0]  # (num_queries, 4) cx cy w h norm
-
-        # Softmax scores + argmax labels
-        exp_logits = np.exp(logits - logits.max(axis=-1, keepdims=True))
-        probs = exp_logits / exp_logits.sum(axis=-1, keepdims=True)
-        scores = probs.max(axis=-1)  # (num_queries,)
-        labels = probs.argmax(axis=-1).astype(np.int64)  # (num_queries,)
-
-        # Filter by score threshold
-        keep = scores >= self._score_threshold
-        scores = scores[keep]
-        labels = labels[keep]
-        boxes_norm = pred_boxes[keep]  # (N, 4) cx cy w h normalized
-
-        # Convert cx cy w h -> x1 y1 x2 y2 in original pixel space
-        orig_h, orig_w = sample.original_size
-        cx, cy, w, h = (
-            boxes_norm[:, 0] * orig_w,
-            boxes_norm[:, 1] * orig_h,
-            boxes_norm[:, 2] * orig_w,
-            boxes_norm[:, 3] * orig_h,
-        )
-        x1 = cx - w / 2
-        y1 = cy - h / 2
-        x2 = cx + w / 2
-        y2 = cy + h / 2
-        boxes = np.stack([x1, y1, x2, y2], axis=1).astype(np.float32)
-
-        # Labels from ONNX are 0-indexed (80 classes) -> map to COCO 91-class IDs
-        coco_labels = np.array(
-            [COCO_80_TO_91.get(int(lbl), int(lbl)) for lbl in labels], dtype=np.int64
-        )
-
-        return Detection(
-            boxes=boxes.reshape(-1, 4),
-            scores=scores.astype(np.float32),
-            labels=coco_labels,
+        return self._adapter.parse_outputs(
+            raw_outputs,
+            original_size=sample.original_size,
+            input_size=self._adapter.input_size,
+            score_threshold=self._score_threshold,
         )
 
     @property
