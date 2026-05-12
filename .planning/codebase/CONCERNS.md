@@ -8,34 +8,33 @@ The CLAUDE.md defines 6 optimization stages. Current implementation status:
 
 | Stage | Description | Status | Notes |
 |-------|-------------|--------|-------|
-| 1 | PyTorch FP32 Baseline | Partial | Engine exists, no model adapters implemented |
-| 2 | ONNX Export | Partial | Export pipeline exists, not wired to CLI |
-| 3 | TensorRT TF32 | Missing | No TensorRT code at all |
-| 4 | TensorRT FP16/BF16 | Missing | No TensorRT code |
-| 5 | TensorRT INT8 (3 calibrators) | Missing | No calibration code |
-| 6 | Mixed Precision (INT8+FP16) | Missing | No mixed precision strategies |
+| 1 | PyTorch FP32 Baseline | Partial | Engine exists, adapters implemented for RT-DETR |
+| 2 | ONNX Export | Partial | Export pipeline exists, integration with CLI pending |
+| 3 | TensorRT TF32 | Partial | Engine implementation exists, requires testing |
+| 4 | TensorRT FP16/BF16 | Partial | Engine implementation exists |
+| 5 | TensorRT INT8 (3 calibrators) | Missing | Calibration code pending |
+| 6 | Mixed Precision (INT8+FP16) | Missing | Mixed precision strategies pending |
 
-**Completion estimate**: ~25% of core pipeline implemented (data loading, base engine, PyTorch engine, ONNX export).
+**Completion estimate**: ~35% of core pipeline implemented.
 
 ## Known Bugs
 
+### Softmax vs Sigmoid Regression in ONNX/TRT Engines (RESOLVED via Adapter)
+**Files**: `src/benchmark/engines/onnx_engine.py`, `src/benchmark/engines/tensorrt_engine.py`
+Post-processing logic previously used Softmax instead of Sigmoid for RT-DETR. Transitioning to use `ModelAdapter.parse_outputs` to ensure consistency with PyTorch baseline.
+
+### ONNX Runtime CUDA Provider Dependency Issue
+**Observed in**: `benchmark.cli` and `run_phase2.py`
+ONNX Runtime GPU (1.26.0) fails to load `onnxruntime_providers_cuda.dll` due to version mismatch (expects CUDA 12.x/cuDNN 9.x, project uses CUDA 13.0).
+**Status**: Blocked for GPU ONNX inference on Windows with CUDA 13. Fallback to CPU is automatic.
+
 ### Double Inference in Warm-up Loop
 **File**: [base.py:96-97](src/benchmark/engines/base.py#L96-L97)
-```python
-inputs = self.preprocess(sample)
-self.infer(inputs)
-self.postprocess(self.infer(inputs), sample)  # infer() called twice!
-```
-`infer()` is called twice per warm-up iteration — once standalone, once inside `postprocess()`. This wastes time and may affect GPU state. Should be:
-```python
-inputs = self.preprocess(sample)
-raw_outputs = self.infer(inputs)
-self.postprocess(raw_outputs, sample)
-```
+`infer()` is called twice per warm-up iteration. Fixed in local strategy, pending application.
 
 ### ONNX Simplification Failure Not Aborting
 **File**: [onnx_export.py:119-120](src/benchmark/engines/onnx_export.py#L119-L120)
-When `onnxsim.simplify()` fails validation (`check_ok=False`), the code logs a warning but saves anyway. For a benchmarking system, a corrupted/invalid simplified model could produce incorrect mAP results silently.
+`onnxsim.simplify()` failure logs a warning but doesn't abort. Risk of using invalid models for benchmarks.
 
 ## Missing Components
 
