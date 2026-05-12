@@ -52,6 +52,16 @@ MODEL_REGISTRY: dict[str, dict[str, str]] = {
         "onnx": "weights/rtdetr-r50vd/rtdetr_r50_sim.onnx",
         "family": "detr",  # routes MACs computation
     },
+    "yolo11l": {
+        "weights": "weights/yolo11l/yolo11l.pt",
+        "onnx": "weights/yolo11l/yolo11l_sim.onnx",
+        "family": "yolo",
+    },
+    "yolo26l": {
+        "weights": "weights/yolo26l/yolo26l.pt",
+        "onnx": "weights/yolo26l/yolo26l_sim.onnx",
+        "family": "yolo",
+    },
 }
 
 
@@ -80,6 +90,13 @@ def _get_adapter(model_name: str) -> object:
             msg = f"RTDETRAdapter not available: {exc}"
             raise typer.BadParameter(msg) from exc
         return RTDETRAdapter()
+
+    if model_name in ("yolo11l", "yolo26l"):
+        from benchmark.models.yolo_adapter import YOLOAdapter
+
+        is_nms_free = model_name == "yolo26l"
+        return YOLOAdapter(is_nms_free=is_nms_free)
+
     msg = f"Unknown model '{model_name}'. Available: {list(MODEL_REGISTRY)}"
     raise typer.BadParameter(msg)
 
@@ -97,9 +114,9 @@ def _run_stage(
 ) -> tuple[float, float, float]:
     """Execute a single benchmark stage. Returns (map_50_95, macs, flops)."""
     dataloader = COCODataLoader(limit=limit)
+    adapter = _get_adapter(model_name)
 
     if stage == "1_pytorch_fp32":
-        adapter = _get_adapter(model_name)
         engine = PyTorchEngine(model_name=model_name, adapter=adapter)  # type: ignore[arg-type]
         weights_path = Path(MODEL_REGISTRY[model_name]["weights"])
         engine.load_model(weights_path)
@@ -133,6 +150,7 @@ def _run_stage(
         engine_onnx = OnnxRuntimeEngine(
             model_name=model_name,
             onnx_path=onnx_path,
+            adapter=adapter,  # type: ignore[arg-type]
             input_size=(640, 640),
         )
         engine_onnx.load_model(onnx_path)  # weights_path ignored by OnnxRuntimeEngine
@@ -161,6 +179,7 @@ def _run_stage(
             model_name=model_name,
             precision=precision,
             engine_dir=engine_dir,
+            adapter=adapter,  # type: ignore[arg-type]
             force_rebuild=force_rebuild,
         )
         engine.load_model(onnx_path)
@@ -191,6 +210,7 @@ def _run_stage(
         engine = TensorRTEngine(
             model_name=model_name,
             precision="int8",
+            adapter=adapter,  # type: ignore[arg-type]
             calibrator_method=cal_method,  # type: ignore[arg-type]
             engine_dir=engine_dir,
             force_rebuild=force_rebuild,
@@ -207,14 +227,19 @@ def _run_stage(
 
     elif stage in ("6_trt_mixed_a", "6_trt_mixed_b"):
         import json
-        
+
         strategy = "a" if stage == "6_trt_mixed_a" else "b"
         onnx_path = Path(MODEL_REGISTRY[model_name]["onnx"])
         if not onnx_path.exists():
             msg = f"ONNX model missing: {onnx_path} — run stage 2 first"
             raise FileNotFoundError(msg)
 
-        best_calibrator_file = result_logger.output_dir / model_name / result_logger.run_id / "int8_best_calibrator.json"
+        best_calibrator_file = (
+            result_logger.output_dir
+            / model_name
+            / result_logger.run_id
+            / "int8_best_calibrator.json"
+        )
         if best_calibrator_file.exists():
             try:
                 cal_data = json.loads(best_calibrator_file.read_text(encoding="utf-8"))
@@ -231,6 +256,7 @@ def _run_stage(
         engine = TensorRTEngine(
             model_name=model_name,
             precision="int8",
+            adapter=adapter,  # type: ignore[arg-type]
             calibrator_method=calibrator,
             engine_dir=engine_dir,
             force_rebuild=force_rebuild,
