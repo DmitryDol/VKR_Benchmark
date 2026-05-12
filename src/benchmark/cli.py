@@ -40,6 +40,8 @@ STAGE_REGISTRY: list[str] = [
     "5_trt_int8_minmax",
     "5_trt_int8_entropy",
     "5_trt_int8_percentile",
+    "6_trt_mixed_a",
+    "6_trt_mixed_b",
 ]
 
 # Model registry — maps CLI name to weights directory and ONNX path
@@ -192,6 +194,47 @@ def _run_stage(
             calibrator_method=cal_method,  # type: ignore[arg-type]
             engine_dir=engine_dir,
             force_rebuild=force_rebuild,
+        )
+        engine.load_model(onnx_path, calibration_dataloader=cal_dataloader)
+
+        result = engine.run_full_benchmark(
+            dataloader,
+            stage=stage,
+            baseline_map_50_95=baseline_map,
+            macs=macs,
+            flops=flops,
+        )
+
+    elif stage in ("6_trt_mixed_a", "6_trt_mixed_b"):
+        import json
+        
+        strategy = "a" if stage == "6_trt_mixed_a" else "b"
+        onnx_path = Path(MODEL_REGISTRY[model_name]["onnx"])
+        if not onnx_path.exists():
+            msg = f"ONNX model missing: {onnx_path} — run stage 2 first"
+            raise FileNotFoundError(msg)
+
+        best_calibrator_file = result_logger.output_dir / model_name / result_logger.run_id / "int8_best_calibrator.json"
+        if best_calibrator_file.exists():
+            try:
+                cal_data = json.loads(best_calibrator_file.read_text(encoding="utf-8"))
+                calibrator = cal_data.get("best_calibrator", "entropy")
+            except (json.JSONDecodeError, OSError):
+                logging.warning("Failed to parse int8_best_calibrator.json, fallback to entropy")
+                calibrator = "entropy"
+        else:
+            logging.warning("int8_best_calibrator.json missing, fallback to entropy")
+            calibrator = "entropy"
+
+        cal_dataloader = COCODataLoader(limit=500)
+
+        engine = TensorRTEngine(
+            model_name=model_name,
+            precision="int8",
+            calibrator_method=calibrator,
+            engine_dir=engine_dir,
+            force_rebuild=force_rebuild,
+            mixed_strategy=strategy,
         )
         engine.load_model(onnx_path, calibration_dataloader=cal_dataloader)
 

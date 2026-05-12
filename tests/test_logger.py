@@ -69,8 +69,8 @@ def test_save_stage_files_creates_csv_and_json(tmp_path: Path) -> None:
 
     assert csv_path.exists(), "Stage CSV not created"
     assert json_path.exists(), "Stage JSON not created"
-    assert csv_path == tmp_path / "test-model" / "1_pytorch_fp32.csv"
-    assert json_path == tmp_path / "test-model" / "1_pytorch_fp32.json"
+    assert csv_path == tmp_path / "test-model" / log.run_id / "1_pytorch_fp32.csv"
+    assert json_path == tmp_path / "test-model" / log.run_id / "1_pytorch_fp32.json"
 
 
 def test_save_stage_files_csv_has_all_fields(tmp_path: Path) -> None:

@@ -12,7 +12,7 @@ from transformers import RTDetrForObjectDetection
 from benchmark.engines.onnx_export import export_to_onnx, simplify_onnx, validate_onnx
 from benchmark.models.rtdetr_adapter import RTDetrONNXWrapper
 
-WEIGHTS_DIR = Path("weights/rtdetr-r50")
+WEIGHTS_DIR = Path("weights/rtdetr-r50vd")
 RAW_ONNX = WEIGHTS_DIR / "rtdetr_r50.onnx"
 SIM_ONNX = WEIGHTS_DIR / "rtdetr_r50_sim.onnx"
 

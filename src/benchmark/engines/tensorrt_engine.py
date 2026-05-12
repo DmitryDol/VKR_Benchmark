@@ -7,6 +7,7 @@ calibrator (MinMax, Entropy, or Percentile) and a calibration dataloader.
 
 from __future__ import annotations
 
+import json
 import logging
 from typing import TYPE_CHECKING, Literal
 
@@ -73,6 +74,7 @@ class TensorRTEngine(BaseEngine):
         force_rebuild: bool = False,
         calibrator_method: Literal["minmax", "entropy", "percentile"] | None = None,
         score_threshold: float = 0.01,
+        mixed_strategy: Literal["a", "b"] | None = None,
     ) -> None:
         super().__init__(model_name, engine_type="tensorrt", precision=precision)
         self._engine_dir = engine_dir
@@ -81,12 +83,18 @@ class TensorRTEngine(BaseEngine):
             calibrator_method
         )
         self._score_threshold = score_threshold
+        self._mixed_strategy: Literal["a", "b"] | None = mixed_strategy
 
         if precision == "int8":
             if calibrator_method is None:
                 msg = "calibrator_method is required when precision='int8'"
                 raise ValueError(msg)
-            self._engine_path = engine_dir / f"rtdetr_int8_{calibrator_method}.engine"
+            if mixed_strategy is not None:
+                self._engine_path = (
+                    engine_dir / f"rtdetr_mixed_{mixed_strategy}_{calibrator_method}.engine"
+                )
+            else:
+                self._engine_path = engine_dir / f"rtdetr_int8_{calibrator_method}.engine"
             self._cache_path: Path | None = engine_dir / f"rtdetr_int8_{calibrator_method}.cache"
         else:
             self._engine_path = engine_dir / f"rtdetr_{precision}.engine"
@@ -196,6 +204,7 @@ class TensorRTEngine(BaseEngine):
 
         config = builder.create_builder_config()
         config.set_memory_pool_limit(trt.MemoryPoolType.WORKSPACE, 2 << 30)
+        config.profiling_verbosity = trt.ProfilingVerbosity.DETAILED
 
         if self.precision == "tf32":
             config.set_flag(trt.BuilderFlag.TF32)
@@ -213,6 +222,17 @@ class TensorRTEngine(BaseEngine):
             config.set_flag(trt.BuilderFlag.BF16)
         elif self.precision == "int8":
             self._apply_int8_config(builder, network, config)
+            if self._mixed_strategy:
+                config.set_flag(trt.BuilderFlag.OBEY_PRECISION_CONSTRAINTS)
+                from benchmark.engines.mixed_precision import apply_strategy_a, apply_strategy_b
+
+                if self._mixed_strategy == "a":
+                    count = apply_strategy_a(network)
+                elif self._mixed_strategy == "b":
+                    count = apply_strategy_b(network)
+                logger.info(
+                    "Strategy %s: %d layers set to FP16", self._mixed_strategy.upper(), count
+                )
 
         # Inference optimization profile (batch=1) — added for all precisions.
         # ONNX was exported with dynamic_axes={0: "batch"}, so TRT
@@ -337,6 +357,11 @@ class TensorRTEngine(BaseEngine):
             self._engine_path.name,
             self.model_size_mb,
         )
+
+        try:
+            analyze_engine_precision(self._engine_path)
+        except Exception as e:
+            logger.warning("Failed to analyze engine precision: %s", e)
 
     def preprocess(self, sample: COCOSample) -> np.ndarray:
         """Resize image and convert to (1, 3, H, W) float32 numpy array.
@@ -520,3 +545,105 @@ class TensorRTEngine(BaseEngine):
             macs=macs,
             flops=flops,
         )
+
+
+def analyze_engine_precision(engine_path: Path) -> dict[str, int | float]:
+    """
+    Анализирует скомпилированный TRT engine и возвращает послойную статистику
+    аппаратного квантования (INT8 vs FP16 vs FP32).
+
+    Parameters
+    ----------
+    engine_path : Path
+        Путь к сериализованному .engine файлу.
+
+    Returns
+    -------
+    dict[str, int | float]
+        Словарь с абсолютными счетчиками слоев и процентной долей INT8.
+
+    Raises
+    ------
+    RuntimeError
+        Если движок не удалось десериализовать.
+    """
+    trt_logger = trt.Logger(trt.Logger.WARNING)
+    runtime = trt.Runtime(trt_logger)
+
+    with engine_path.open("rb") as f:
+        engine = runtime.deserialize_cuda_engine(f.read())
+
+    if not engine:
+        raise RuntimeError(f"Не удалось десериализовать TRT engine: {engine_path}")
+
+    inspector = engine.create_engine_inspector()
+    # Выгружаем профиль графа в машиночитаемом формате
+    engine_json_str = inspector.get_engine_information(trt.LayerInformationFormat.JSON)
+    engine_data = json.loads(engine_json_str)
+
+    layers = engine_data.get("Layers", [])
+    total_layers = len(layers)
+
+    if total_layers == 0:
+        logger.warning("Engine Inspector вернул пустой список слоев.")
+        return {"total_layers": 0, "int8_ratio_percent": 0.0}
+
+    stats: dict[str, int] = {"INT8": 0, "FP16": 0, "FP32": 0, "OTHER": 0, "UNKNOWN": 0}
+
+    for layer in layers:
+        if isinstance(layer, dict):
+            # Пытаемся получить явное поле Precision (если есть)
+            precision = layer.get("Precision", None)
+            if not precision:
+                # Если явного нет, смотрим на тип данных первого выхода
+                outputs = layer.get("Outputs", [])
+                if outputs and isinstance(outputs, list):
+                    datatype = outputs[0].get("Format/Datatype", "OTHER")
+                    if datatype == "Int8":
+                        precision = "INT8"
+                    elif datatype == "Half":
+                        precision = "FP16"
+                    elif datatype == "Float":
+                        precision = "FP32"
+                    else:
+                        precision = "OTHER"
+                else:
+                    precision = "OTHER"
+        else:
+            # Если профилирование не DETAILED, слой — это просто строка (имя)
+            precision = "UNKNOWN"
+
+        if precision in stats:
+            stats[precision] += 1
+        else:
+            stats["OTHER"] += 1
+
+    # Считаем процент INT8 только среди известных слоев, либо среди всех
+    known_layers = total_layers - stats["UNKNOWN"]
+    if known_layers > 0:
+        int8_ratio = (stats["INT8"] / known_layers) * 100
+    else:
+        int8_ratio = 0.0
+
+    metrics: dict[str, int | float] = {
+        "total_layers": total_layers,
+        "int8_layers": stats["INT8"],
+        "fp16_layers": stats["FP16"],
+        "fp32_layers": stats["FP32"],
+        "other_layers": stats["OTHER"],
+        "unknown_layers": stats["UNKNOWN"],
+        "int8_ratio_percent": round(int8_ratio, 2),
+    }
+
+    logger.info(
+        "Engine Precision Profile | Total: %d | INT8: %d (%.2f%%) | FP16: %d | FP32: %d | Other: %d | Unknown: %d",
+        metrics["total_layers"],
+        metrics["int8_layers"],
+        metrics["int8_ratio_percent"],
+        metrics["fp16_layers"],
+        metrics["fp32_layers"],
+        metrics["other_layers"],
+        metrics["unknown_layers"],
+    )
+
+    return metrics
