@@ -202,6 +202,23 @@ class RTDETRAdapter:
 
         return model
 
+    def infer(self, model: nn.Module, inputs: torch.Tensor) -> object:
+        """Run forward pass using the HuggingFace model.
+
+        Parameters
+        ----------
+        model : nn.Module
+            RTDetrForObjectDetection model.
+        inputs : torch.Tensor
+            Preprocessed image tensor (1, 3, 640, 640).
+
+        Returns
+        -------
+        object
+            RTDetrObjectDetectionOutput dataclass.
+        """
+        return model(pixel_values=inputs)
+
     def parse_outputs(
         self,
         raw_outputs: object,
