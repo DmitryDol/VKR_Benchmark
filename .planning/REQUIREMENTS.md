@@ -48,22 +48,22 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| ADPT-04 | | Pending |
-| ADPT-05 | | Pending |
-| ADPT-06 | | Pending |
-| ADPT-07 | | Pending |
-| ADPT-08 | | Pending |
-| CLI-04 | | Pending |
-| CLI-05 | | Pending |
-| CLI-06 | | Pending |
-| LOG-13 | | Pending |
-| LOG-14 | | Pending |
+| ADPT-04 | Phase 6 | Pending |
+| ADPT-05 | Phase 7 | Pending |
+| ADPT-06 | Phase 7 | Pending |
+| ADPT-07 | Phase 7 | Pending |
+| ADPT-08 | Phase 6 | Pending |
+| CLI-04 | Phase 8 | Pending |
+| CLI-05 | Phase 8 | Pending |
+| CLI-06 | Phase 8 | Pending |
+| LOG-13 | Phase 9 | Pending |
+| LOG-14 | Phase 9 | Pending |
 
 **Coverage:**
 - v2.0 requirements: 10 total
-- Mapped to phases: 0
-- Unmapped: 10 
+- Mapped to phases: 10
+- Unmapped: 0 
 
 ---
 *Requirements defined: 2026-05-12*
-*Last updated: 2026-05-12 after initial definition*
+*Last updated: 2026-05-12 after roadmap creation*
