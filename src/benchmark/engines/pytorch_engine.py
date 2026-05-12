@@ -43,6 +43,23 @@ class ModelAdapter(Protocol):
         """Load model weights and return the model ready for inference."""
         ...
 
+    def infer(self, model: nn.Module, inputs: torch.Tensor) -> object:
+        """Run a forward pass on the model with the given inputs.
+
+        Parameters
+        ----------
+        model : nn.Module
+            The loaded PyTorch model.
+        inputs : torch.Tensor
+            Preprocessed input tensor.
+
+        Returns
+        -------
+        object
+            Raw model output.
+        """
+        ...
+
     def parse_outputs(
         self,
         raw_outputs: object,
@@ -106,9 +123,12 @@ class PyTorchEngine(BaseEngine):
 
     def load_model(self, weights_path: Path) -> None:
         """Load model and disable TF32 for FP32 baseline integrity."""
-        # Disable TF32 — critical for accurate FP32 baseline
-        torch.backends.cuda.matmul.allow_tf32 = False  # type: ignore[attr-defined]
-        torch.backends.cudnn.allow_tf32 = False  # type: ignore[attr-defined]
+        # Disable TF32 — critical for accurate FP32 baseline.
+        # Safely set attributes only if they exist (e.g. when CUDA is available).
+        if hasattr(torch.backends.cuda.matmul, "allow_tf32"):
+            torch.backends.cuda.matmul.allow_tf32 = False  # type: ignore[attr-defined]
+        if hasattr(torch.backends.cudnn, "allow_tf32"):
+            torch.backends.cudnn.allow_tf32 = False  # type: ignore[attr-defined]
         logger.info("TF32 disabled for FP32 baseline integrity")
 
         self._weights_path = weights_path
@@ -124,17 +144,18 @@ class PyTorchEngine(BaseEngine):
         h, w = self._adapter.input_size
         img = Image.fromarray(sample.image).resize((w, h), Image.BILINEAR)
         tensor = tvf.to_tensor(img)  # (3, H, W) float32 [0, 1]
-        # RT-DETR expects pixels in [0, 1] WITHOUT ImageNet normalization
-        # (preprocessor_config.json: "do_normalize": false)
+        
+        # NOTE: Individual adapters may expect different normalization.
+        # Preprocessing here is kept generic (standard tensor conversion).
         return tensor.unsqueeze(0).to(self._device)
 
-    def infer(self, inputs: object) -> object:
+    def infer(self, inputs: torch.Tensor) -> object:
         """Run forward pass under torch.no_grad()."""
         if self._model is None:
             msg = "Model not loaded. Call load_model() first."
             raise RuntimeError(msg)
         with torch.no_grad():
-            return self._model(pixel_values=inputs)
+            return self._adapter.infer(self._model, inputs)
 
     def postprocess(self, raw_outputs: object, sample: COCOSample) -> Detection:
         """Delegate to adapter for model-specific output parsing."""

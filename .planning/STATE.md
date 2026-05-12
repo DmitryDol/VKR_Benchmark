@@ -26,8 +26,8 @@ See: .planning/PROJECT.md (updated 2026-05-09)
 
 Phase: 6. YOLO Family Integration
 Plan: —
-Status: Not started
-Last activity: 2026-05-12 — Roadmap created for v2.0
+Status: In Discussion (Decisions finalized)
+Last activity: 2026-05-12 — Phase 6 decisions finalized (06-CONTEXT.md created)
 
 ## Performance Metrics
 

@@ -22,7 +22,10 @@
   1. User can load and run inference on YOLO11 with NMS output parsing.
   2. User can load and run inference on YOLO26 using end2end mode (NMS-free).
   3. Formatted outputs from YOLO models accurately match the `Detection` standard.
-**Plans**: TBD
+**Plans**:
+- [ ] 06-01-PLAN.md — Framework Refactor for Architecture-Agnostic Inference
+- [ ] 06-02-PLAN.md — YOLO11/YOLO26 Integration (Weights & Adapter)
+- [ ] 06-03-PLAN.md — Stage 1 (FP32 Baseline) Benchmarking for YOLO Family
 
 ### Phase 7: Transformer-based Family Integration
 **Goal**: System supports modern transformer object detectors (D-FINE, DEIMv2, RF-DETR)
@@ -58,7 +61,7 @@
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 6. YOLO Family Integration | 0/0 | Not started | - |
+| 6. YOLO Family Integration | 0/3 | In Progress | - |
 | 7. Transformer-based Family Integration | 0/0 | Not started | - |
 | 8. Batch Orchestration & Resource Management | 0/0 | Not started | - |
 | 9. Unified Reporting & Summarization | 0/0 | Not started | - |
