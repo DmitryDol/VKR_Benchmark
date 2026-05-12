@@ -8,6 +8,16 @@ A production-ready benchmarking framework that conducts six SOTA transformer-bas
 
 Scientifically rigorous, per-stage metric logging that produces publication-ready CSV/JSON reports showing how each optimization stage affects every metric — no intermediate results lost.
 
+## Current Milestone: v2.0 v2.0_models_integration
+
+**Goal:** Horizontally scale the optimization pipeline to support RF-DETR, D-FINE, DEIMv2, YOLO11, and YOLO26 by implementing the ModelAdapter protocol and a batch orchestration CLI.
+
+**Target features:**
+- Implement ModelAdapter Protocol
+- Integrate Transformer-based Family (RF-DETR, D-FINE, DEIMv2)
+- Integrate YOLO Family (YOLO11, YOLO26) with efficient NMS
+- Batch Orchestration CLI (`run-all`) generating global .csv and summary.md
+
 ## Requirements
 
 ### Validated
