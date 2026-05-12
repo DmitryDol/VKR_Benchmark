@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: "Phase 05 shipped — PR #4"
+status: Awaiting next milestone
 stopped_at: Phase 4 context gathered
-last_updated: "2026-05-12T00:06:43.368Z"
-last_activity: 2026-05-12
+last_updated: "2026-05-12T00:48:12.941Z"
+last_activity: 2026-05-12 — Milestone v1.0 completed and archived
 progress:
   total_phases: 5
   completed_phases: 3
@@ -25,13 +25,10 @@ See: .planning/PROJECT.md (updated 2026-05-09)
 
 ## Current Position
 
-Phase: 05 (mixed-precision-final-run) — EXECUTING
-Plan: 1 of 1
-Phase: 05 (Mixed Precision & Final Run) — NEXT
-Status: Phase 05 shipped — PR #4
-Last activity: 2026-05-12
-
-Progress: [██████████] 100%
+Phase: Milestone v1.0 complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-05-12 — Milestone v1.0 completed and archived
 
 ## Performance Metrics
 
@@ -84,6 +81,13 @@ Recent decisions affecting current work:
 
 ## Deferred Items
 
+Items acknowledged and deferred at milestone close on 2026-05-12:
+
+| Category | Item | Status |
+|----------|------|--------|
+| quick_task | 260510-a01-fix-windows-path-rtdetr | missing |
+| quick_task | 260510-a02-run-id-resultlogger | missing |
+
 | Category | Item | Status | Deferred At |
 |----------|------|--------|-------------|
 | Model adapters | RF-DETR, D-FINE, DEIMv2, YOLO11, YOLO26 (ADPT-04 to ADPT-08) | v2 | Init |
@@ -103,3 +107,7 @@ Recent decisions affecting current work:
 Last session: 2026-05-10T23:27:16.478Z
 Stopped at: Phase 4 context gathered
 Resume file: .planning/phases/04-tensorrt-int8-calibration/04-CONTEXT.md
+
+## Operator Next Steps
+
+- Start the next milestone with /gsd-new-milestone

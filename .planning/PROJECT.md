@@ -21,21 +21,24 @@ Scientifically rigorous, per-stage metric logging that produces publication-read
 - ✓ ModelAdapter protocol for model-specific loading and output parsing — existing (interface only)
 - ✓ Latency split measurement (preprocess + inference + postprocess) — existing
 - ✓ COCO mAP evaluation (mAP_50, mAP_50:95) via pycocotools — existing
+- ✓ RT-DETR Model adapter (ADPT-01, ADPT-02) — v1.0
+- ✓ Weight downloading and management for RT-DETR (ADPT-03) — v1.0
+- ✓ TensorRT engine builder with TF32 precision flag (TRT-01) — v1.0
+- ✓ TensorRT FP16 and BF16 engine builds (TRT-02, TRT-03) — v1.0
+- ✓ TensorRT INT8 with MinMax, Entropy, and Percentile calibrators (CAL-01..CAL-05) — v1.0
+- ✓ Mixed Precision quantization (Strategy A, Strategy B) (MIX-01..MIX-03) — v1.0
+- ✓ Per-stage CSV/JSON output files (LOG-10) — v1.0
+- ✓ Unified results file with stage column for cross-stage analysis (LOG-11) — v1.0
+- ✓ CLI interface (typer) for single-model and batch execution (CLI-01..CLI-03) — v1.0
+- ✓ MACs/FLOPs computation per model (LOG-09) — v1.0
+- ✓ Hardware info logging (GPU name, driver, CUDA version, TensorRT version) (LOG-12) — v1.0
+- ✓ TensorRT workspace memory limit enforcement (2 GB) (TRT-04) — v1.0
 
 ### Active
 
-- [ ] Model adapters for all 6 architectures (RT-DETR, RF-DETR, D-FINE, DEIMv2, YOLO11, YOLO26)
-- [ ] Weight downloading and management for all 6 models
-- [ ] TensorRT engine builder with TF32 precision flag
-- [ ] TensorRT FP16 and BF16 engine builds (with BF16 hardware verification)
-- [ ] TensorRT INT8 with MinMax, Entropy, and Percentile calibrators
-- [ ] Mixed Precision quantization (Strategy A: first/last layer FP16, Strategy B: Softmax/LayerNorm FP16)
-- [ ] Per-stage CSV/JSON output files (one per model per stage)
-- [ ] Unified results file with stage column for cross-stage analysis
-- [ ] CLI interface (typer) for single-model and batch execution
-- [ ] MACs/FLOPs computation per model
-- [ ] Hardware info logging (GPU name, driver, CUDA version, TensorRT version)
-- [ ] TensorRT workspace memory limit enforcement (2 GB)
+- [ ] Model adapters for remaining 5 architectures (RF-DETR, D-FINE, DEIMv2, YOLO11, YOLO26) (ADPT-04..ADPT-08)
+- [ ] Strategy C (Sensitivity Analysis)
+- [ ] Automated Output generation (LaTeX tables, auto-charts)
 
 ### Out of Scope
 
