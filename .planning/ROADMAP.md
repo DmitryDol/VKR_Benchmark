@@ -37,11 +37,12 @@
   2. TensorRT engines (TF32, FP16, BF16) are built successfully for YOLO models.
   3. INT8 calibration (MinMax, Entropy, Percentile) completes for YOLO family.
   4. Mixed Precision (Stage 6) is applied to YOLO models with measured mAP and Latency.
-**Plans**:
-- [ ] 07-01-PLAN.md — YOLO Export & Baseline Verification (Stages 1-2)
-- [ ] 07-02-PLAN.md — TensorRT Standard Precision (Stages 3-4)
-- [ ] 07-03-PLAN.md — YOLO INT8 Calibration Search (Stage 5)
-- [ ] 07-04-PLAN.md — YOLO Mixed Precision (Stage 6) & Final Report
+  5. Each model's best config lands within 2.0% mAP_50:95 of its FP32 baseline, or the miss is flagged for a user decision (D-14/D-15).
+**Plans**: 4 plans
+- [ ] 07-01-PLAN.md — YOLO ONNX export (ultralytics + onnxsim) & model-scoped TRT engine paths [wave 1]
+- [ ] 07-02-PLAN.md — TensorRT standard precision (Stages 3-4: TF32/FP16/BF16) for the YOLO family [wave 2]
+- [ ] 07-03-PLAN.md — YOLO INT8 calibration (Stage 5: MinMax/Entropy/Percentile, fixed 500-image set) [wave 2]
+- [ ] 07-04-PLAN.md — YOLO Mixed Precision (Stage 6: Strategy A/B), unified merge & D-14 accuracy gate [wave 3]
 
 ### Phase 8: Transformer-based Family Integration
 **Goal**: System supports modern transformer object detectors (D-FINE, DEIMv2, RF-DETR)
