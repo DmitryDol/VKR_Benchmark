@@ -14,6 +14,13 @@ Requirements for initial release. Each maps to roadmap phases.
 - [ ] **ADPT-07**: Implement ModelAdapter for RF-DETR (NMS-free)
 - [ ] **ADPT-08**: Implement ModelAdapter for YOLO26 (NMS-free, end2end=True)
 
+### YOLO Optimization Pipeline
+- [ ] **OPT-YOLO-01**: Export YOLO11l and YOLO26l to simplified ONNX (ultralytics export + onnxsim, opset 17) and record Stage 2 metrics
+- [ ] **OPT-YOLO-02**: Build TensorRT standard-precision engines (TF32, FP16, BF16) for the YOLO family and record Stage 3-4 metrics
+- [ ] **OPT-YOLO-03**: Run INT8 calibration (MinMax, Entropy, Percentile) for the YOLO family on a fixed 500-image COCO set and record Stage 5 metrics
+- [ ] **OPT-YOLO-04**: Apply Mixed Precision quantization (Strategy A & B) to the YOLO family using the best per-model calibrator and record Stage 6 metrics
+- [ ] **OPT-YOLO-05**: Log full per-stage metrics for every YOLO optimization stage to the unified results.csv/results.json with model_name and stage columns
+
 ### Batch Orchestration CLI
 - [ ] **CLI-04**: Implement `run-all` Typer command to sequentially execute all models across all stages
 - [ ] **CLI-05**: Enforce explicit CUDA cache clearing (`torch.cuda.empty_cache()`) and garbage collection between batch runs to prevent VRAM leaks
@@ -49,21 +56,26 @@ Which phases cover which requirements. Updated during roadmap creation.
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | ADPT-04 | Phase 6 | Pending |
-| ADPT-05 | Phase 7 | Pending |
-| ADPT-06 | Phase 7 | Pending |
-| ADPT-07 | Phase 7 | Pending |
 | ADPT-08 | Phase 6 | Pending |
-| CLI-04 | Phase 8 | Pending |
-| CLI-05 | Phase 8 | Pending |
-| CLI-06 | Phase 8 | Pending |
-| LOG-13 | Phase 9 | Pending |
-| LOG-14 | Phase 9 | Pending |
+| OPT-YOLO-01 | Phase 7 | Pending |
+| OPT-YOLO-02 | Phase 7 | Pending |
+| OPT-YOLO-03 | Phase 7 | Pending |
+| OPT-YOLO-04 | Phase 7 | Pending |
+| OPT-YOLO-05 | Phase 7 | Pending |
+| ADPT-05 | Phase 8 | Pending |
+| ADPT-06 | Phase 8 | Pending |
+| ADPT-07 | Phase 8 | Pending |
+| CLI-04 | Phase 9 | Pending |
+| CLI-05 | Phase 9 | Pending |
+| CLI-06 | Phase 9 | Pending |
+| LOG-13 | Phase 10 | Pending |
+| LOG-14 | Phase 10 | Pending |
 
 **Coverage:**
-- v2.0 requirements: 10 total
-- Mapped to phases: 10
-- Unmapped: 0 
+- v2.0 requirements: 15 total
+- Mapped to phases: 15
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-05-12*
-*Last updated: 2026-05-12 after roadmap creation*
+*Last updated: 2026-05-14 — added OPT-YOLO-01..05 (Phase 7); synced Traceability table with the v2.0 phase layout*
