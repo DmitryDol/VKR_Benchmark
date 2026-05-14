@@ -74,7 +74,7 @@ Recent decisions affecting current work:
 
 Last session: 2026-05-14T12:55:00.207Z
 Stopped at: Phase 7 context gathered
-Resume file: .planning/milestones/v2.0-phases/07-yolo-family-quantization/07-CONTEXT.md
+Resume file: .planning/phases/07-yolo-family-quantization-stages-2-6/07-CONTEXT.md
 
 ## Operator Next Steps
 

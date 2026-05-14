@@ -118,7 +118,7 @@ A's exact first/last layer selection for a multi-head YOLO detector, and ONNX Ru
   07-04 Mixed Precision & Final Report). ROADMAP's success criteria are
   build/run/complete-oriented — D-14 adds the 2.0% accuracy gate on top.
 - `.planning/REQUIREMENTS.md` — v2.0 requirements and traceability table.
-- `.planning/milestones/v2.0-phases/07-yolo-family-quantization/RESEARCH.md` —
+- `.planning/phases/07-yolo-family-quantization-stages-2-6/07-RESEARCH.md` —
   YOLO11/26 quantization research: DFL sensitivity, NMS-free YOLO26, TRT 10
   calibrator pitfalls, output shapes. **MUST read before planning.**
 - `.planning/milestones/v2.0-phases/06-yolo-family-integration/06-CONTEXT.md` —
