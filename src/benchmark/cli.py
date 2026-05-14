@@ -8,6 +8,7 @@ Commands:
 
 from __future__ import annotations
 
+import json
 import logging
 import sys
 from pathlib import Path
@@ -17,6 +18,7 @@ import typer
 
 from benchmark.data.coco_loader import COCODataLoader
 from benchmark.engines.onnx_engine import OnnxRuntimeEngine
+from benchmark.engines.onnx_export import export_yolo_to_onnx
 from benchmark.engines.pytorch_engine import PyTorchEngine
 from benchmark.engines.tensorrt_engine import TensorRTEngine
 from benchmark.utils.hardware import HardwareInfo
@@ -92,7 +94,7 @@ def _get_adapter(model_name: str) -> object:
         return RTDETRAdapter()
 
     if model_name in ("yolo11l", "yolo26l"):
-        from benchmark.models.yolo_adapter import YOLOAdapter
+        from benchmark.models.yolo_adapter import YOLOAdapter  # noqa: PLC0415
 
         is_nms_free = model_name == "yolo26l"
         return YOLOAdapter(is_nms_free=is_nms_free)
@@ -101,7 +103,7 @@ def _get_adapter(model_name: str) -> object:
     raise typer.BadParameter(msg)
 
 
-def _run_stage(
+def _run_stage(  # noqa: PLR0912, PLR0915
     model_name: str,
     stage: str,
     limit: int | None,
@@ -140,12 +142,22 @@ def _run_stage(
     elif stage == "2_onnx_fp32":
         onnx_path = Path(MODEL_REGISTRY[model_name]["onnx"])
         if not onnx_path.exists():
-            logging.warning(
-                "ONNX model not found at %s — run stage 1 first to export it",
-                onnx_path,
-            )
-            msg = f"ONNX model missing: {onnx_path}"
-            raise FileNotFoundError(msg)
+            if MODEL_REGISTRY[model_name].get("family") == "yolo":
+                logging.info(
+                    "ONNX model not found at %s — exporting from .pt weights on demand",
+                    onnx_path,
+                )
+                export_yolo_to_onnx(
+                    weights_path=Path(MODEL_REGISTRY[model_name]["weights"]),
+                    output_path=onnx_path,
+                )
+            else:
+                logging.warning(
+                    "ONNX model not found at %s — run stage 1 first to export it",
+                    onnx_path,
+                )
+                msg = f"ONNX model missing: {onnx_path}"
+                raise FileNotFoundError(msg)
 
         engine_onnx = OnnxRuntimeEngine(
             model_name=model_name,
@@ -226,8 +238,6 @@ def _run_stage(
         )
 
     elif stage in ("6_trt_mixed_a", "6_trt_mixed_b"):
-        import json
-
         strategy = "a" if stage == "6_trt_mixed_a" else "b"
         onnx_path = Path(MODEL_REGISTRY[model_name]["onnx"])
         if not onnx_path.exists():
