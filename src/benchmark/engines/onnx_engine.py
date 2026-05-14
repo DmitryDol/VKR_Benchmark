@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 import logging
+import os
+import site
+import sys
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -10,17 +14,54 @@ import onnxruntime as ort
 from PIL import Image
 
 from benchmark.engines.base import BaseEngine, Detection
-from benchmark.engines.pytorch_engine import ModelAdapter
 
 if TYPE_CHECKING:
-    from pathlib import Path
-
     from benchmark.data.coco_loader import COCOSample
+    from benchmark.engines.pytorch_engine import ModelAdapter
 
 # Minimum number of output tensors expected from RT-DETR ONNX model
 _MIN_ONNX_OUTPUTS: int = 2
 
 logger = logging.getLogger(__name__)
+
+_cuda_dll_dirs_registered = False
+
+
+def _register_cuda_dll_dirs() -> None:
+    """Add the pip-installed CUDA 12 runtime libs to the Windows DLL search path.
+
+    onnxruntime-gpu 1.26 is built against CUDA 12.x, but the project's torch
+    ships CUDA 13.x — so ORT's CUDA EP cannot use torch's bundled libs. The
+    CUDA 12 runtime/cuDNN come from the ``nvidia-*-cu12`` pip packages, which
+    land in ``site-packages/nvidia/*/bin``. ORT does not auto-discover them on
+    Windows, so register them here. Both ``os.add_dll_directory`` AND a PATH
+    prepend are required: ``cudnn64_9.dll`` is a thin loader that pulls its
+    sub-DLLs (``cudnn_graph64_9.dll`` etc.) via the legacy PATH search.
+    """
+    global _cuda_dll_dirs_registered  # noqa: PLW0603
+    if _cuda_dll_dirs_registered or sys.platform != "win32":
+        return
+
+    bin_dirs: list[str] = []
+    for site_dir in site.getsitepackages():
+        nvidia_root = Path(site_dir) / "nvidia"
+        if not nvidia_root.is_dir():
+            continue
+        bin_dirs.extend(str(p) for p in nvidia_root.glob("*/bin") if p.is_dir())
+
+    if not bin_dirs:
+        logger.warning(
+            "ONNX CUDA EP: no nvidia-*-cu12 package bin dirs found — "
+            "install them with `uv pip install nvidia-cuda-runtime-cu12 "
+            "nvidia-cudnn-cu12 nvidia-cublas-cu12 nvidia-cufft-cu12`"
+        )
+        return
+
+    for d in bin_dirs:
+        os.add_dll_directory(d)
+    os.environ["PATH"] = os.pathsep.join([*bin_dirs, os.environ.get("PATH", "")])
+    _cuda_dll_dirs_registered = True
+    logger.info("ONNX CUDA EP: registered %d CUDA 12 DLL dir(s)", len(bin_dirs))
 
 
 class OnnxRuntimeEngine(BaseEngine):
@@ -66,6 +107,7 @@ class OnnxRuntimeEngine(BaseEngine):
         T-02-06 mitigation: check available providers; fall back to CPU
         with a logged warning if CUDA EP is unavailable.
         """
+        _register_cuda_dll_dirs()
         available = ort.get_available_providers()
         if "CUDAExecutionProvider" in available:
             providers: list[str] = ["CUDAExecutionProvider", "CPUExecutionProvider"]
@@ -84,10 +126,18 @@ class OnnxRuntimeEngine(BaseEngine):
         self._session = ort.InferenceSession(
             str(self._onnx_path), sess_options=opts, providers=providers
         )
+        active = self._session.get_providers()
+        if "CUDAExecutionProvider" in providers and "CUDAExecutionProvider" not in active:
+            logger.warning(
+                "OnnxRuntimeEngine: CUDA EP requested but ORT fell back to %s — "
+                "stage 2 latency will reflect CPU inference",
+                active,
+            )
         logger.info(
-            "ONNX session loaded: %s (%.1f MB)",
+            "ONNX session loaded: %s (%.1f MB) — active provider: %s",
             self._onnx_path.name,
             self.model_size_mb,
+            active[0],
         )
 
     def preprocess(self, sample: COCOSample) -> np.ndarray:
