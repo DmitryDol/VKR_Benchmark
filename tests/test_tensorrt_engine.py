@@ -13,20 +13,46 @@ from benchmark.engines.tensorrt_engine import TensorRTEngine
 def test_tensorrt_engine_mixed_strategy_paths(tmp_path: Path):
     adapter = MagicMock()
     engine = TensorRTEngine(
-        model_name="test",
+        model_name="yolo11l",
         precision="int8",
         calibrator_method="entropy",
         engine_dir=tmp_path,
         adapter=adapter,
         mixed_strategy="a"
     )
-    assert engine._engine_path.name == "rtdetr_mixed_a_entropy.engine"
-    assert engine._cache_path.name == "rtdetr_int8_entropy.cache"
+    assert engine._engine_path.name == "yolo11l_mixed_a_entropy.engine"
+    assert engine._cache_path.name == "yolo11l_int8_entropy.cache"
+
+
+def test_tensorrt_engine_model_scoped_non_int8_path(tmp_path: Path):
+    adapter = MagicMock()
+    engine = TensorRTEngine(
+        model_name="yolo26l",
+        precision="fp16",
+        engine_dir=tmp_path,
+        adapter=adapter,
+    )
+    assert engine._engine_path.name == "yolo26l_fp16.engine"
+    assert engine._cache_path is None
+
+
+def test_tensorrt_engine_rtdetr_paths_use_model_token(tmp_path: Path):
+    """rt-detr model_name uses underscore-sanitized token in filenames."""
+    adapter = MagicMock()
+    engine = TensorRTEngine(
+        model_name="rt-detr",
+        precision="tf32",
+        engine_dir=tmp_path,
+        adapter=adapter,
+    )
+    # Dash sanitized to underscore: rt-detr -> rt_detr
+    assert engine._engine_path.name == "rt_detr_tf32.engine"
+
 
 def test_tensorrt_engine_build_mixed_strategy(tmp_path: Path):
     adapter = MagicMock()
     engine = TensorRTEngine(
-        model_name="test",
+        model_name="yolo11l",
         precision="int8",
         calibrator_method="entropy",
         engine_dir=tmp_path,

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from typing import TYPE_CHECKING, Literal
 
 import numpy as np
@@ -47,7 +48,7 @@ class TensorRTEngine(BaseEngine):
     Builds TRT engines from ONNX models in TF32, FP16, BF16, or INT8 precision.
     Engines are cached to disk and reused on subsequent runs unless
     ``force_rebuild=True`` is set.  INT8 builds also cache the calibration table
-    to ``{engine_dir}/rtdetr_int8_{calibrator_method}.cache``.
+    to ``{engine_dir}/{model_token}_int8_{calibrator_method}.cache``.
 
     Parameters
     ----------
@@ -89,19 +90,26 @@ class TensorRTEngine(BaseEngine):
         self._score_threshold = score_threshold
         self._mixed_strategy: Literal["a", "b"] | None = mixed_strategy
 
+        # T-07-03: sanitize model_name to alphanumeric/underscore only before using in
+        # filenames, preventing path separator injection into engine_dir.
+        # Dashes are replaced so rt-detr -> rt_detr (safe filesystem token).
+        model_token: str = re.sub(r"[^A-Za-z0-9_]", "_", self.model_name)
+
         if precision == "int8":
             if calibrator_method is None:
                 msg = "calibrator_method is required when precision='int8'"
                 raise ValueError(msg)
             if mixed_strategy is not None:
                 self._engine_path = (
-                    engine_dir / f"rtdetr_mixed_{mixed_strategy}_{calibrator_method}.engine"
+                    engine_dir / f"{model_token}_mixed_{mixed_strategy}_{calibrator_method}.engine"
                 )
             else:
-                self._engine_path = engine_dir / f"rtdetr_int8_{calibrator_method}.engine"
-            self._cache_path: Path | None = engine_dir / f"rtdetr_int8_{calibrator_method}.cache"
+                self._engine_path = engine_dir / f"{model_token}_int8_{calibrator_method}.engine"
+            self._cache_path: Path | None = (
+                engine_dir / f"{model_token}_int8_{calibrator_method}.cache"
+            )
         else:
-            self._engine_path = engine_dir / f"rtdetr_{precision}.engine"
+            self._engine_path = engine_dir / f"{model_token}_{precision}.engine"
             self._cache_path = None
 
         self._calibration_dataloader: COCODataLoader | None = None
