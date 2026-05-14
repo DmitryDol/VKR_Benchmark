@@ -41,8 +41,10 @@
 **Plans**: 4 plans
 - [ ] 07-01-PLAN.md — YOLO ONNX export (ultralytics + onnxsim) & model-scoped TRT engine paths [wave 1]
 - [ ] 07-02-PLAN.md — TensorRT standard precision (Stages 3-4: TF32/FP16/BF16) for the YOLO family [wave 2]
-- [ ] 07-03-PLAN.md — YOLO INT8 calibration (Stage 5: MinMax/Entropy/Percentile, fixed 500-image set) [wave 2]
-- [ ] 07-04-PLAN.md — YOLO Mixed Precision (Stage 6: Strategy A/B), unified merge & D-14 accuracy gate [wave 3]
+- [ ] 07-03-PLAN.md — YOLO INT8 calibration (Stage 5: MinMax/Entropy/Percentile, fixed 500-image set) [wave 3]
+- [ ] 07-04-PLAN.md — YOLO Mixed Precision (Stage 6: Strategy A/B), unified merge & D-14 accuracy gate [wave 4]
+
+**Wave sequencing**: Waves run strictly serially (1 → 2 → 3 → 4) — the three GPU-checkpoint plans (07-02, 07-03, 07-04) share one RTX 3070 and one `--run-id`, so they cannot parallelize. 07-01 (autonomous, no GPU) → 07-02 (Stages 3-4) → 07-03 (Stage 5, depends_on 07-02) → 07-04 (Stage 6, depends_on 07-02+07-03). Cross-cutting constraints: strict 2 GB TRT workspace (D-06), BF16 must build on Ampere sm_86 (D-05), fixed-seed shared 500-image calibration set (D-08), D-14 2.0% accuracy gate applied per-model at the 07-04 checkpoint.
 
 ### Phase 8: Transformer-based Family Integration
 **Goal**: System supports modern transformer object detectors (D-FINE, DEIMv2, RF-DETR)
