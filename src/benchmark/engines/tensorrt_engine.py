@@ -385,7 +385,7 @@ class TensorRTEngine(BaseEngine):
 
         try:
             analyze_engine_precision(self._engine_path)
-        except Exception as e:
+        except (RuntimeError, json.JSONDecodeError, KeyError, AttributeError) as e:
             logger.warning("Failed to analyze engine precision: %s", e)
 
     def preprocess(self, sample: COCOSample) -> np.ndarray:
