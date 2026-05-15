@@ -236,7 +236,7 @@ class ResultLogger:
                 map_float = float(map_val)  # type: ignore[arg-type]
             except (TypeError, ValueError):
                 map_float = float("nan")
-            if map_float != map_float:  # NaN check
+            if math.isnan(map_float):
                 continue
             # D-12: capture latency for the tie-break. Missing/non-numeric/NaN
             # latency falls back to +inf so it can never win a tie.
@@ -245,7 +245,7 @@ class ResultLogger:
                 lat_float = float(lat_val)  # type: ignore[arg-type]
             except (TypeError, ValueError):
                 lat_float = float("inf")
-            if lat_float != lat_float:  # noqa: PLR0124 — explicit NaN check, matches map_50_95 pattern above
+            if math.isnan(lat_float):
                 lat_float = float("inf")
             candidates.append(
                 {
