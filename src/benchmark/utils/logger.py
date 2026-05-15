@@ -315,8 +315,12 @@ class ResultLogger:
         if cal_file.exists():
             try:
                 best_stage = json.loads(cal_file.read_text(encoding="utf-8")).get("best_stage", "")
-            except Exception:
-                pass
+            except (json.JSONDecodeError, OSError) as exc:
+                logger.warning(
+                    "Could not parse %s: %s — summary will omit winner mark",
+                    cal_file,
+                    exc,
+                )
 
         # Format text and markdown summaries
         txt_path = self.output_dir / "summary.txt"
