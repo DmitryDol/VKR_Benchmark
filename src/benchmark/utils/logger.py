@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import json
 import logging
+import math
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -14,6 +15,35 @@ if TYPE_CHECKING:
     from benchmark.utils.hardware import HardwareInfo
 
 logger = logging.getLogger(__name__)
+
+
+def _fmt_metric(val: object, dec: int) -> str:
+    """Format a numeric metric for the summary table, handling NaN and non-numerics.
+
+    Used by :meth:`ResultLogger.merge_to_unified`. Lifted out of the per-row
+    loop (WR-04) so the helper is created once. Uses ``math.isnan`` for the
+    NaN check (WR-05) instead of the ``f != f`` self-comparison idiom.
+
+    Parameters
+    ----------
+    val : object
+        Raw cell value from the CSV row dict.
+    dec : int
+        Number of decimal places.
+
+    Returns
+    -------
+    str
+        Formatted numeric string, ``"NaN"`` for NaN, or ``str(val)`` for
+        anything that cannot be coerced to ``float``.
+    """
+    try:
+        x = float(val)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return str(val)
+    if math.isnan(x):
+        return "NaN"
+    return f"{x:.{dec}f}"
 
 
 @dataclass
@@ -333,21 +363,13 @@ class ResultLogger:
             if st == best_stage and best_stage:
                 st += " ★"
 
-            def fmt(val: object, dec: int) -> str:
-                try:
-                    f = float(val)  # type: ignore[arg-type]
-                    if f != f: return "NaN"
-                    return f"{f:.{dec}f}"
-                except (ValueError, TypeError):
-                    return str(val)
-
             rows.append([
                 st,
-                fmt(r.get("map_50_95"), 3),
-                fmt(r.get("latency_total_ms"), 1),
-                fmt(r.get("throughput_fps"), 1),
-                fmt(r.get("accuracy_drop_pct"), 1),
-                fmt(r.get("model_size_mb"), 1)
+                _fmt_metric(r.get("map_50_95"), 3),
+                _fmt_metric(r.get("latency_total_ms"), 1),
+                _fmt_metric(r.get("throughput_fps"), 1),
+                _fmt_metric(r.get("accuracy_drop_pct"), 1),
+                _fmt_metric(r.get("model_size_mb"), 1),
             ])
 
         # Write summary.txt
