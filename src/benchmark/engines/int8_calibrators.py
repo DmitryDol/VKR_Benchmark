@@ -36,32 +36,57 @@ _CAL_BATCH_SIZE: int = 8
 _INPUT_SIZE: tuple[int, int] = (640, 640)
 
 
-def load_calibration_data(dataloader: COCODataLoader) -> list[torch.Tensor]:
+def load_calibration_data(
+    dataloader: COCODataLoader,
+    adapter: object | None = None,
+) -> list[torch.Tensor]:
     """Preprocess COCO images for INT8 calibration.
 
-    Applies the same preprocessing as TensorRTEngine: resize to 640x640,
-    scale to [0, 1], CHW layout. No ImageNet normalization (RT-DETR convention).
-    Iterates in dataset order with no shuffle.
+    If ``adapter`` exposes a callable ``preprocess(sample, device=None) -> Tensor``
+    (e.g. ``YOLOAdapter`` letterbox), delegate to it — this is required so that
+    the INT8 calibration statistics match the model's inference-time preprocess
+    distribution. YOLO11/26 use letterbox padding at training time; calibrating
+    on stretch-resized images would shift the activation distribution and
+    degrade quantization accuracy.
+
+    Without an adapter (RT-DETR / generic), falls back to a 640x640 stretch
+    resize with [0, 1] normalization in CHW layout — the RT-DETR convention
+    used by v1.0. Iterates in dataset order with no shuffle either way.
 
     Parameters
     ----------
     dataloader : COCODataLoader
         COCO data source. Uses the dataloader's configured limit (e.g. 500 images).
+    adapter : object | None
+        Optional model adapter; if it exposes ``preprocess``, that path is used.
 
     Returns
     -------
     list[torch.Tensor]
         CPU float32 tensors of shape (1, 3, 640, 640), one per image.
     """
+    adapter_pre = getattr(adapter, "preprocess", None) if adapter is not None else None
+    use_adapter = callable(adapter_pre)
+
     data: list[torch.Tensor] = []
     h, w = _INPUT_SIZE
     for sample in dataloader:
-        img = Image.fromarray(sample.image).resize((w, h), Image.BILINEAR)
-        arr = np.array(img, dtype=np.float32) / 255.0  # HWC [0, 1]
-        arr = arr.transpose(2, 0, 1)  # CHW
-        tensor = torch.as_tensor(arr[np.newaxis, ...])  # (1, 3, H, W) CPU float32
+        if use_adapter:
+            # Adapter returns (1, 3, H, W) float32 on the requested device.
+            # device=None keeps the tensor on CPU — calibration moves the batch
+            # to CUDA in `get_batch`, so the per-image tensors stay on CPU here.
+            tensor = adapter_pre(sample, device=None).to(torch.float32).cpu()
+        else:
+            img = Image.fromarray(sample.image).resize((w, h), Image.BILINEAR)
+            arr = np.array(img, dtype=np.float32) / 255.0  # HWC [0, 1]
+            arr = arr.transpose(2, 0, 1)  # CHW
+            tensor = torch.as_tensor(arr[np.newaxis, ...])  # (1, 3, H, W) CPU float32
         data.append(tensor)
-    logger.info("Loaded %d calibration images", len(data))
+    logger.info(
+        "Loaded %d calibration images (adapter_preprocess=%s)",
+        len(data),
+        use_adapter,
+    )
     return data
 
 
@@ -264,6 +289,7 @@ def _make_calibrator(
     method: Literal["minmax", "entropy", "percentile"],
     dataloader: COCODataLoader,
     cache_path: Path,
+    adapter: object | None = None,
 ) -> MinMaxCalibrator | EntropyCalibrator | PercentileCalibrator:
     """Construct the appropriate INT8 calibrator and load calibration images.
 
@@ -275,6 +301,10 @@ def _make_calibrator(
         Source of calibration images (limit pre-set by caller, e.g. 500).
     cache_path : Path
         Cache file path — passed to the calibrator for read/write.
+    adapter : object | None
+        Optional model adapter — if it exposes a ``preprocess`` method, the
+        calibration images are preprocessed through it (e.g. YOLO letterbox)
+        so that the calibration distribution matches inference-time inputs.
 
     Returns
     -------
@@ -286,7 +316,7 @@ def _make_calibrator(
     ValueError
         If ``method`` is not one of the accepted literals.
     """
-    data = load_calibration_data(dataloader)
+    data = load_calibration_data(dataloader, adapter=adapter)
     if method == "minmax":
         return MinMaxCalibrator(data, cache_path)
     if method == "entropy":

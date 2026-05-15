@@ -31,6 +31,28 @@ app = typer.Typer(
     add_completion=False,
 )
 
+# Phase 7 D-07 / D-08: the INT8 calibration set is fixed at 500 COCO val2017 images
+# and is the SAME 500 across all three calibrators (MinMax, Entropy, Percentile) and
+# across both Stage 5 and Stage 6 — the calibrator algorithm (or mixed-precision
+# strategy) must be the only variable. COCODataLoader is deterministic by
+# construction: `__post_init__` does `sorted(self._coco.getImgIds())[:limit]` (no
+# shuffle, no seed), so `COCODataLoader(limit=500)` returns the identical 500
+# image_ids in the identical order on every construction. This module-level
+# constant + helper centralizes that contract so Stages 5 and 6 share one
+# call-site (Plan 07-03, Task 1).
+_CALIBRATION_IMAGE_COUNT: int = 500
+
+
+def _build_calibration_dataloader() -> COCODataLoader:
+    """Build the single canonical calibration dataloader (Plan 07-03, D-07/D-08).
+
+    Returns a :class:`COCODataLoader` limited to the first
+    ``_CALIBRATION_IMAGE_COUNT`` image_ids in COCO's stable sorted order — the
+    same 500 images, deterministically, used by all three INT8 calibrators and by
+    the Stage 6 mixed-precision rebuilds.
+    """
+    return COCODataLoader(limit=_CALIBRATION_IMAGE_COUNT)
+
 # CLI-01 / CLI-02 stage registry — ordered list for --all-stages
 # Stage 1 and 2 only in Phase 2; later phases append stages 3-6
 STAGE_REGISTRY: list[str] = [
@@ -216,8 +238,10 @@ def _run_stage(  # noqa: PLR0912, PLR0915
             msg = f"ONNX model missing: {onnx_path} — run stage 2 first"
             raise FileNotFoundError(msg)
 
-        # Fixed 500-image calibration dataloader (D-06: first 500 in iteration order)
-        cal_dataloader = COCODataLoader(limit=500)
+        # D-07/D-08: single shared 500-image calibration dataloader (see
+        # _build_calibration_dataloader docstring). MUST be the identical call for
+        # both Stage 5 and Stage 6 so the calibrator algorithm is the only variable.
+        cal_dataloader = _build_calibration_dataloader()
 
         engine = TensorRTEngine(
             model_name=model_name,
@@ -261,7 +285,8 @@ def _run_stage(  # noqa: PLR0912, PLR0915
             logging.warning("int8_best_calibrator.json missing, fallback to entropy")
             calibrator = "entropy"
 
-        cal_dataloader = COCODataLoader(limit=500)
+        # D-07/D-08: same 500-image calibration set as Stage 5 (see helper docstring)
+        cal_dataloader = _build_calibration_dataloader()
 
         engine = TensorRTEngine(
             model_name=model_name,

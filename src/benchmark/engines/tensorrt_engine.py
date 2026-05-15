@@ -305,6 +305,7 @@ class TensorRTEngine(BaseEngine):
             self._calibrator_method,
             self._calibration_dataloader,
             self._cache_path,
+            adapter=self._adapter,
         )
 
         # Включение FP16 как Fallback для INT8.
