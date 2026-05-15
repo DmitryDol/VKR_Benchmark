@@ -33,7 +33,12 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _CAL_BATCH_SIZE: int = 8
-_INPUT_SIZE: tuple[int, int] = (640, 640)
+# WR-06: _INPUT_SIZE follows the project convention (height, width); PIL's
+# Image.resize() takes (width, height) — callers must pass the tuple reversed.
+# Today both dimensions are 640 so the swap is invisible, but a future
+# non-square value (e.g. (384, 640)) would silently mis-shape tensors without
+# this comment.
+_INPUT_SIZE: tuple[int, int] = (640, 640)  # (H, W)
 
 
 def load_calibration_data(
@@ -69,7 +74,8 @@ def load_calibration_data(
     use_adapter = callable(adapter_pre)
 
     data: list[torch.Tensor] = []
-    h, w = _INPUT_SIZE
+    # WR-06: _INPUT_SIZE is (H, W); PIL.resize() takes (W, H) — pass reversed.
+    target_h, target_w = _INPUT_SIZE
     for sample in dataloader:
         if use_adapter:
             # Adapter returns (1, 3, H, W) float32 on the requested device.
@@ -77,7 +83,7 @@ def load_calibration_data(
             # to CUDA in `get_batch`, so the per-image tensors stay on CPU here.
             tensor = adapter_pre(sample, device=None).to(torch.float32).cpu()
         else:
-            img = Image.fromarray(sample.image).resize((w, h), Image.BILINEAR)
+            img = Image.fromarray(sample.image).resize((target_w, target_h), Image.BILINEAR)
             arr = np.array(img, dtype=np.float32) / 255.0  # HWC [0, 1]
             arr = arr.transpose(2, 0, 1)  # CHW
             tensor = torch.as_tensor(arr[np.newaxis, ...])  # (1, 3, H, W) CPU float32
