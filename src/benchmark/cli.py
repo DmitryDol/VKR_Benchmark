@@ -411,6 +411,7 @@ def run_benchmark(
             if s in ("5_trt_int8_minmax", "5_trt_int8_entropy", "5_trt_int8_percentile"):
                 result_logger.save_int8_best_calibrator(model)
         except Exception as exc:
+            logging.getLogger(__name__).exception("Stage %s failed", s)
             typer.echo(f"Stage {s} failed: {exc}", err=True)
             raise typer.Exit(code=1) from exc
 
