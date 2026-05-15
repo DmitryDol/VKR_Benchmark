@@ -40,7 +40,7 @@
   5. Each model's best config lands within 2.0% mAP_50:95 of its FP32 baseline, or the miss is flagged for a user decision (D-14/D-15).
 **Plans**: 4 plans
 - [x] 07-01-PLAN.md — YOLO ONNX export (ultralytics + onnxsim) & model-scoped TRT engine paths [wave 1]
-- [ ] 07-02-PLAN.md — TensorRT standard precision (Stages 3-4: TF32/FP16/BF16) for the YOLO family [wave 2]
+- [x] 07-02-PLAN.md — TensorRT standard precision (Stages 3-4: TF32/FP16/BF16) for the YOLO family [wave 2]
 - [ ] 07-03-PLAN.md — YOLO INT8 calibration (Stage 5: MinMax/Entropy/Percentile, fixed 500-image set) [wave 3]
 - [ ] 07-04-PLAN.md — YOLO Mixed Precision (Stage 6: Strategy A/B), unified merge & D-14 accuracy gate [wave 4]
 
@@ -81,7 +81,7 @@
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 6. YOLO Family Integration (Stage 1) | 3/3 | Completed | 2026-05-12 |
-| 7. YOLO Family Quantization (Stages 2-6) | 1/4 | In Progress|  |
+| 7. YOLO Family Quantization (Stages 2-6) | 2/4 | In Progress|  |
 | 8. Transformer-based Family Integration | 0/0 | Not started | - |
 | 9. Batch Orchestration & Resource Management | 0/0 | Not started | - |
 | 10. Unified Reporting & Summarization | 0/0 | Not started | - |
