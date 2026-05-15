@@ -356,6 +356,9 @@ class TensorRTEngine(BaseEngine):
 
         self._stream = torch.cuda.Stream()
 
+        # Reset metadata before re-population — prevents double-append on retry/reload (CR-01).
+        self._output_names = []
+        self._output_shapes = []
         for i in range(self._engine.num_io_tensors):
             name = self._engine.get_tensor_name(i)
             mode = self._engine.get_tensor_mode(name)
