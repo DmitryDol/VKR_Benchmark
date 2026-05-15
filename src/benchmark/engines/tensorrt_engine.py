@@ -573,8 +573,9 @@ def analyze_engine_precision(engine_path: Path) -> dict[str, int | float]:
     with engine_path.open("rb") as f:
         engine = runtime.deserialize_cuda_engine(f.read())
 
-    if not engine:
-        raise RuntimeError(f"Не удалось десериализовать TRT engine: {engine_path}")
+    if engine is None:
+        msg = f"Не удалось десериализовать TRT engine: {engine_path}"
+        raise RuntimeError(msg)
 
     inspector = engine.create_engine_inspector()
     # Выгружаем профиль графа в машиночитаемом формате
