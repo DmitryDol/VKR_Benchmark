@@ -18,7 +18,7 @@ Requirements for initial release. Each maps to roadmap phases.
 - [x] **OPT-YOLO-01**: Export YOLO11l and YOLO26l to simplified ONNX (ultralytics export + onnxsim, opset 17) and record Stage 2 metrics
 - [ ] **OPT-YOLO-02**: Build TensorRT standard-precision engines (TF32, FP16, BF16) for the YOLO family and record Stage 3-4 metrics
 - [ ] **OPT-YOLO-03**: Run INT8 calibration (MinMax, Entropy, Percentile) for the YOLO family on a fixed 500-image COCO set and record Stage 5 metrics
-- [ ] **OPT-YOLO-04**: Apply Mixed Precision quantization (Strategy A & B) to the YOLO family using the best per-model calibrator and record Stage 6 metrics
+- [x] **OPT-YOLO-04**: Apply Mixed Precision quantization (Strategy A & B) to the YOLO family using the best per-model calibrator and record Stage 6 metrics
 - [x] **OPT-YOLO-05**: Log full per-stage metrics for every YOLO optimization stage to the unified results.csv/results.json with model_name and stage columns
 
 ### Batch Orchestration CLI
@@ -60,7 +60,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | OPT-YOLO-01 | Phase 7 | Complete |
 | OPT-YOLO-02 | Phase 7 | Pending |
 | OPT-YOLO-03 | Phase 7 | Pending |
-| OPT-YOLO-04 | Phase 7 | Pending |
+| OPT-YOLO-04 | Phase 7 | Complete |
 | OPT-YOLO-05 | Phase 7 | Complete |
 | ADPT-05 | Phase 8 | Pending |
 | ADPT-06 | Phase 8 | Pending |
