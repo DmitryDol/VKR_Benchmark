@@ -230,9 +230,10 @@ class PercentileCalibrator(_BASE_LEGACY):  # type: ignore[misc]
         self._cache_path = cache_path
         self._batch_idx: int = 0
         self._device_buf: torch.Tensor | None = None
-        # pybind11 property assignments — required for IInt8LegacyCalibrator
-        self.quantile: float = 0.9999
-        self.regression_cutoff: float = 1.0
+        # WR-07: pybind11 IInt8LegacyCalibrator — TRT calls get_quantile() /
+        # get_regression_cutoff() (overridden below). We use only the
+        # underscored backing fields; the public `quantile`/`regression_cutoff`
+        # attributes are ignored by the base class and were redundant.
         self._quantile: float = 0.9999
         self._regression_cutoff: float = 1.0
 
