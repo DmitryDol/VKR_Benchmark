@@ -561,8 +561,12 @@ def analyze_engine_precision(engine_path: Path) -> dict[str, int | float]:
     Raises
     ------
     RuntimeError
-        Если движок не удалось десериализовать.
+        Если движок не удалось десериализовать, либо если TensorRT не установлен.
     """
+    if trt is None:
+        msg = "TensorRT not installed. Install with: uv sync --group tensorrt"
+        raise RuntimeError(msg)
+
     trt_logger = trt.Logger(trt.Logger.WARNING)
     runtime = trt.Runtime(trt_logger)
 
