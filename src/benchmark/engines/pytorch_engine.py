@@ -43,6 +43,22 @@ class ModelAdapter(Protocol):
         """Load model weights and return the model ready for inference."""
         ...
 
+    def preprocess(
+        self, sample: COCOSample, device: torch.device | None = None
+    ) -> torch.Tensor:
+        """Convert a COCO sample to the model's expected input tensor.
+
+        Optional — engines fall back to a generic stretch-resize if an
+        adapter does not implement this. YOLO adapters MUST implement it
+        to apply letterbox preprocessing (paper mAP parity).
+
+        Returns
+        -------
+        torch.Tensor
+            Shape ``(1, 3, H, W)`` float32 on ``device`` if provided.
+        """
+        ...
+
     def infer(self, model: nn.Module, inputs: torch.Tensor) -> object:
         """Run a forward pass on the model with the given inputs.
 
@@ -112,7 +128,7 @@ class PyTorchEngine(BaseEngine):
         model_name: str,
         adapter: ModelAdapter,
         device: str = "cuda",
-        score_threshold: float = 0.01,
+        score_threshold: float = 0.001,
     ) -> None:
         super().__init__(model_name, engine_type="pytorch", precision="fp32")
         self._adapter = adapter
@@ -139,8 +155,16 @@ class PyTorchEngine(BaseEngine):
     def preprocess(self, sample: COCOSample) -> torch.Tensor:
         """Resize, normalize, and convert image to model input tensor.
 
+        If the adapter exposes a ``preprocess`` method (e.g. YOLO letterbox),
+        delegate to it. Otherwise fall back to plain stretch-resize, which
+        matches RT-DETR's training-time preprocessing.
+
         Returns (1, 3, H, W) float32 tensor on the target device.
         """
+        adapter_pre = getattr(self._adapter, "preprocess", None)
+        if callable(adapter_pre):
+            return adapter_pre(sample, device=self._device)
+
         h, w = self._adapter.input_size
         img = Image.fromarray(sample.image).resize((w, h), Image.BILINEAR)
         tensor = tvf.to_tensor(img)  # (3, H, W) float32 [0, 1]

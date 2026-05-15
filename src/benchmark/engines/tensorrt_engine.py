@@ -77,7 +77,7 @@ class TensorRTEngine(BaseEngine):
         adapter: ModelAdapter,
         force_rebuild: bool = False,
         calibrator_method: Literal["minmax", "entropy", "percentile"] | None = None,
-        score_threshold: float = 0.01,
+        score_threshold: float = 0.001,
         mixed_strategy: Literal["a", "b"] | None = None,
     ) -> None:
         super().__init__(model_name, engine_type="tensorrt", precision=precision)
@@ -378,8 +378,17 @@ class TensorRTEngine(BaseEngine):
     def preprocess(self, sample: COCOSample) -> np.ndarray:
         """Resize image and convert to model input tensor using adapter.
 
+        If the adapter exposes a ``preprocess`` method (e.g. YOLO letterbox),
+        delegate to it and return the tensor as a CPU numpy array. Otherwise
+        fall back to the generic stretch-resize used by RT-DETR.
+
         Returns (1, 3, H, W) float32 numpy array.
         """
+        adapter_pre = getattr(self._adapter, "preprocess", None)
+        if callable(adapter_pre):
+            tensor = adapter_pre(sample, device=None)
+            return tensor.cpu().numpy().astype(np.float32)
+
         h, w = self._adapter.input_size
         img = Image.fromarray(sample.image).resize((w, h), Image.BILINEAR)
         arr = np.array(img, dtype=np.float32) / 255.0  # HWC, [0, 1]
