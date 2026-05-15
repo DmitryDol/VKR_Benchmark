@@ -591,21 +591,44 @@ def analyze_engine_precision(engine_path: Path) -> dict[str, int | float]:
 
     stats: dict[str, int] = {"INT8": 0, "FP16": 0, "FP32": 0, "OTHER": 0, "UNKNOWN": 0}
 
+    # Map TRT Format/Datatype strings → stats bucket names.
+    datatype_to_precision: dict[str, str] = {
+        "Int8": "INT8",
+        "Half": "FP16",
+        "Float": "FP32",
+    }
+
     for layer in layers:
         if isinstance(layer, dict):
-            # Пытаемся получить явное поле Precision (если есть)
+            # Try the explicit Precision field first (if present).
             precision = layer.get("Precision", None)
             if not precision:
-                # Если явного нет, смотрим на тип данных первого выхода
+                # WR-08: classify by ALL output datatypes, not just outputs[0].
+                # A multi-output layer can have mixed-precision outputs (e.g.
+                # Conv with INT8 main + FP32 bias). The previous code reported
+                # only outputs[0], over-counting INT8 for such graphs.
+                # Strategy: collect every output's mapped precision; if they
+                # all agree, use that; if they differ, log and bucket as
+                # OTHER so the int8_ratio_percent diagnostic is conservative.
                 outputs = layer.get("Outputs", [])
                 if outputs and isinstance(outputs, list):
-                    datatype = outputs[0].get("Format/Datatype", "OTHER")
-                    if datatype == "Int8":
-                        precision = "INT8"
-                    elif datatype == "Half":
-                        precision = "FP16"
-                    elif datatype == "Float":
-                        precision = "FP32"
+                    output_precisions = {
+                        datatype_to_precision.get(
+                            out.get("Format/Datatype", "OTHER"),
+                            "OTHER",
+                        )
+                        for out in outputs
+                        if isinstance(out, dict)
+                    }
+                    if len(output_precisions) == 1:
+                        precision = next(iter(output_precisions))
+                    elif output_precisions:
+                        logger.warning(
+                            "Layer %s has mixed output datatypes %s — bucketing as OTHER",
+                            layer.get("Name", "<unnamed>"),
+                            sorted(output_precisions),
+                        )
+                        precision = "OTHER"
                     else:
                         precision = "OTHER"
                 else:
