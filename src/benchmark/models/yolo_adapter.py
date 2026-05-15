@@ -196,7 +196,11 @@ class YOLOAdapter:
         in_h, in_w = input_size
         r, pad_top, pad_left = _letterbox_params(img_h, img_w, in_h, in_w)
 
-        boxes = results[:, :4]
+        # WR-10: clone the slice so subsequent reads of `results[:, 4]` /
+        # `results[:, 5]` are not corrupted by the in-place box rescale.
+        # The NMS-free branch already uses `.copy()` for the numpy path;
+        # mirror that defensiveness here for the torch path.
+        boxes = results[:, :4].clone()
         boxes[:, [0, 2]] = (boxes[:, [0, 2]] - pad_left) / r
         boxes[:, [1, 3]] = (boxes[:, [1, 3]] - pad_top) / r
         boxes[:, [0, 2]] = boxes[:, [0, 2]].clamp(0, img_w - 1)
