@@ -164,8 +164,10 @@ class ResultLogger:
         """Compare the three INT8 stage results and write int8_best_calibrator.json.
 
         Reads ``{run_id}/{stage}.json`` for minmax, entropy, and percentile.
-        Picks the calibrator with the highest ``map_50_95`` (NaN / missing stages
-        are skipped).  Writes the result to::
+        Picks the calibrator with the highest ``map_50_95``, tie-broken by the
+        lower ``latency_total_ms`` (Phase 7 D-12). NaN / missing stages are
+        skipped; a missing/non-numeric latency falls back to ``+inf`` so it
+        can never win a tie. Writes the result to::
 
             results/{model_name}/{run_id}/int8_best_calibrator.json
 
@@ -206,17 +208,40 @@ class ResultLogger:
                 map_float = float("nan")
             if map_float != map_float:  # NaN check
                 continue
-            candidates.append({"calibrator": method, "stage": stage_key, "map_50_95": map_float})
+            # D-12: capture latency for the tie-break. Missing/non-numeric/NaN
+            # latency falls back to +inf so it can never win a tie.
+            lat_val = data.get("latency_total_ms")
+            try:
+                lat_float = float(lat_val)  # type: ignore[arg-type]
+            except (TypeError, ValueError):
+                lat_float = float("inf")
+            if lat_float != lat_float:  # noqa: PLR0124 — explicit NaN check, matches map_50_95 pattern above
+                lat_float = float("inf")
+            candidates.append(
+                {
+                    "calibrator": method,
+                    "stage": stage_key,
+                    "map_50_95": map_float,
+                    "latency_total_ms": lat_float,
+                }
+            )
 
         if not candidates:
             logger.warning("No valid INT8 results found — int8_best_calibrator.json not written")
             return None
 
-        best = max(candidates, key=lambda x: float(x["map_50_95"]))
+        # D-12: rank by mAP descending, tie-break by latency ascending.
+        # `min` with the negated mAP picks the highest-mAP candidate first;
+        # on an exact mAP tie the lower latency wins.
+        best = min(
+            candidates,
+            key=lambda x: (-float(x["map_50_95"]), float(x["latency_total_ms"])),
+        )
         out: dict[str, object] = {
             "best_calibrator": best["calibrator"],
             "best_stage": best["stage"],
             "map_50_95": best["map_50_95"],
+            "latency_total_ms": best["latency_total_ms"],
             "all_candidates": candidates,
         }
 
