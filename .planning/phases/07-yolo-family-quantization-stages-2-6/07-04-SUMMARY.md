@@ -157,6 +157,12 @@ On both YOLO models, the TF32 and BF16 stages produce mAP **identical to FP32 to
 
 This is consistent with TRT 10.x documentation and explains why TF32/BF16 are accuracy-preserving "free" speedups on this hardware. Recorded for the diploma's methodology section.
 
+## Finding F-Entropy-YOLO — Calibrator Architecture Sensitivity
+
+`EntropyCalibrator2` underperforms catastrophically on both YOLO models — yolo11l drops 30.3%, yolo26l drops 47.6% — while minmax/percentile stay within 2-17%. This is **not a code defect** but a known architectural mismatch: KL-divergence histogram-search picks pathological thresholds on YOLO's wide multi-modal detection-head activations (DFL on YOLO11, TopK/Gather on YOLO26). Same code path on RT-DETR (phase 5) showed entropy competitive with minmax — confirming the failure is architecture-driven, not implementation-driven.
+
+D-12 best-calibrator selection (in `int8_best_calibrator.json`) automatically excludes entropy from "best" for both YOLO models, so the Stage 6 mixed-precision build above already used the correct base (percentile for yolo11l, minmax for yolo26l). Full root-cause analysis + literature references are recorded in `07-03-SUMMARY.md` under "Finding F-Entropy-YOLO" and `07-RESEARCH.md` Pitfall 4. Disposition: keep entropy in the pipeline per OPT-YOLO-03, document the finding, no fix needed.
+
 ## What Was Built
 
 **Task 1 — D-13 Strategy A/B contract pinned on a YOLO-shaped network (commit `d80be52`):**

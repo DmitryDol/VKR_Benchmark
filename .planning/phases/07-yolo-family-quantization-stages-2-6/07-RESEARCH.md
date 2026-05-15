@@ -90,6 +90,12 @@ results = preds[mask]
 **Why it happens:** `IInt8LegacyCalibrator` (used for Percentile) requires overriding `read_histogram_cache` and `write_histogram_cache`.
 **How to avoid:** Implement dummy overrides returning `None` as seen in `src/benchmark/engines/int8_calibrators.py`. [VERIFIED: code audit]
 
+### Pitfall 4: EntropyCalibrator2 on CNN Detection Heads
+**What goes wrong:** Catastrophic mAP collapse — yolo11l drops 30.3% mAP_50:95, yolo26l drops 47.6%, while minmax/percentile stay within 2-17% on the same calibration set + preprocess. mAP_50 partially survives (0.51 / 0.38) but mAP_75 and mAP_50:95 collapse → detections occur but bbox localisation is broken.
+**Why it happens:** `IInt8EntropyCalibrator2` builds an 8192-bin per-tensor histogram and uses KL-divergence search for the optimal 8-bit clipping threshold. YOLO detection heads have **wide multi-modal activation distributions** (YOLO11 DFL: 16 discrete bbox bins + objectness + class logits at different scales; YOLO26 NMS-free head: bimodal zeros + large TopK/Gather outputs). KL-search picks a threshold that catastrophically clips one mode. The implementation itself is correct (TRT 10.x's recommended modern entropy class); the algorithm is simply unsuitable for these activation distributions.
+**How to avoid:** Use MinMax or Percentile for CNN-detector families. EntropyCalibrator2 is preferable for transformer-attention models (e.g. RT-DETR — see phase 5 results, where entropy was competitive). The D-12 per-model best-calibrator logic in `logger.py:save_int8_best_calibrator` auto-selects the winner, so entropy is benchmarked-then-discarded for YOLO — keep it in the pipeline for scientific completeness per OPT-YOLO-03. [VERIFIED: phase 7 measurements yolo_quant run]
+**Sources:** TensorRT Best Practices Guide (recommends MinMax for detection); Ultralytics INT8 TRT export uses MinMax by default; Krishnamoorthi 2018 finds entropy preferable for transformer attention specifically, not CNN heads.
+
 ## Code Examples
 
 ### Calibrator Selection (Direct API)

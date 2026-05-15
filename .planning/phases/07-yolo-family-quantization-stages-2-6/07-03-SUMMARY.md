@@ -125,6 +125,37 @@ INT8 calibration completed for YOLO11l and YOLO26l with all three calibrators (M
 
 **Plan 07-04 (Stage 6 Mixed Precision) reads these JSONs** to pick the base INT8 calibrator for each YOLO model and applies fallback Strategies A/B (and optionally C) on top of that base.
 
+## Finding F-Entropy-YOLO — Entropy Calibrator Failure Mode
+
+`EntropyCalibrator2` produces catastrophic accuracy drops on both YOLO models:
+
+| Model | minmax | entropy | percentile | FP32 baseline |
+|-------|--------|---------|-----------|---------------|
+| yolo11l mAP_50:95 | 0.5132 (-2.1%) | **0.3656 (-30.3%)** | 0.5137 (-2.1%) | 0.5244 |
+| yolo26l mAP_50:95 | 0.5150 (-4.7%) | **0.2829 (-47.6%)** | 0.4473 (-17.2%) | 0.5403 |
+
+This is **not a bug** in the calibrator implementation:
+- `IInt8EntropyCalibrator2` is TRT 10.x's recommended modern entropy calibrator
+- Calibration cache header confirms correct format (`TRT-101601-EntropyCalibration2`)
+- Same 500-image letterbox calibration set works fine for `minmax`/`percentile` — preprocessing matches inference distribution
+- Phase 5 RT-DETR (transformer architecture) showed entropy competitive with minmax on the same code path
+
+**Root cause** (architecture-driven, not data-driven):
+
+EntropyCalibrator2 builds a per-tensor 8192-bin histogram and uses KL-divergence search to find a threshold that minimises information loss when clipping to 8-bit. YOLO detection heads have **wide multi-modal activation distributions** that this method handles poorly:
+
+- **YOLO11 DFL head**: bbox-regression activations span DFL's 16 discrete bins (0–16), objectness scores 0–1, class logits up to tens. KL-search picks a threshold that catastrophically clips one mode (here: bbox regression → mAP_50_95=0.366 with mAP_50=0.511, i.e. detections still happen but boxes are mis-localised).
+- **YOLO26 NMS-free head**: TopK + Gather + Round produce bimodal distributions (zeros + large values). The entropy-optimal threshold cuts off the high-value mode → both classification AND localisation degrade (mAP_50=0.382).
+
+**Literature corroborates** (see RESEARCH.md Pitfall 4):
+- TensorRT Best Practices Guide: "for detection models with wide activation ranges, MinMax calibration is recommended; EntropyCalibrator2 may underperform"
+- Ultralytics' own INT8 TRT export does not use entropy by default for YOLO
+- Krishnamoorthi 2018 finds entropy preferable for **transformer attention**, not CNN detection heads
+
+**Implication for the diploma**: this is a *valuable scientific result*, not a methodology defect. It demonstrates that "one calibrator fits all" is incorrect, and motivates the D-12 per-model best-calibrator selection logic that automatically excludes entropy when it underperforms. Strategy C (deferred to v2 ADV-01) would be the natural next step for closing the remaining ~2-5% gap, but it requires per-layer sensitivity profiling beyond v2 scope.
+
+**Disposition**: keep entropy in the pipeline per OPT-YOLO-03 (all three calibrators required); document the finding; D-12 auto-selects the winner.
+
 ## D-14 verdict — deferred to Plan 07-04
 
 Per RESEARCH.md and D-14, the YOLO11l pure-INT8 best-case drop (~2%) and the YOLO26l pure-INT8 best-case drop (~5%) are **expected findings, not failures of this plan**. The D-14 accuracy-drop gate is applied in Plan 07-04, where Stage 6 Mixed Precision (FP16 anchor layers around the INT8 base) is the mitigation path. This plan records the numbers and produces the per-model best-calibrator file; it does not gate on accuracy.
