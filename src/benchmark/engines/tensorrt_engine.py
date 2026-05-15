@@ -105,6 +105,15 @@ class TensorRTEngine(BaseEngine):
                 )
             else:
                 self._engine_path = engine_dir / f"{model_token}_int8_{calibrator_method}.engine"
+            # CR-03: cache file path is namespaced per calibrator method
+            # (minmax/entropy/percentile). TRT cache tables produced by
+            # IInt8LegacyCalibrator (Percentile) are NOT interchangeable with
+            # IInt8EntropyCalibrator2 (Entropy/MinMax); the per-method file
+            # name guarantees cache isolation across algorithms. Stage 6
+            # mixed-precision rebuilds share the Stage 5 cache by design
+            # (D-07/D-08) — the engine filename differs by mixed_strategy
+            # while the cache filename omits mixed_strategy so a/b can reuse
+            # the same calibration table.
             self._cache_path: Path | None = (
                 engine_dir / f"{model_token}_int8_{calibrator_method}.cache"
             )
