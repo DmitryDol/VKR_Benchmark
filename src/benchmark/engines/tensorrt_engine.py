@@ -128,8 +128,13 @@ class TensorRTEngine(BaseEngine):
         self._stream: torch.cuda.Stream | None = None
         self._skipped_reason: str = ""
         self._input_name: str = ""
+        self._input_shape: tuple[int, ...] = ()
         self._output_names: list[str] = []
         self._output_shapes: list[tuple[int, ...]] = []
+        # WR-09: pre-allocated persistent I/O buffers; populated by _load_engine
+        # and reused on every infer() call to avoid 1000 CUDA allocs/run.
+        self._input_buf: torch.Tensor | None = None
+        self._output_bufs: list[torch.Tensor] = []
 
     def load_model(
         self,
@@ -373,9 +378,21 @@ class TensorRTEngine(BaseEngine):
             mode = self._engine.get_tensor_mode(name)
             if mode == trt.TensorIOMode.INPUT:
                 self._input_name = name
+                self._input_shape = tuple(self._engine.get_tensor_shape(name))
             else:
                 self._output_names.append(name)
                 self._output_shapes.append(tuple(self._engine.get_tensor_shape(name)))
+
+        # WR-09: pre-allocate persistent I/O buffers once at load time. infer()
+        # reuses them on every call, replacing the per-call torch.as_tensor /
+        # torch.empty allocations that previously biased vram_peak_mb upward
+        # via allocator fragmentation.
+        self._input_buf = torch.empty(
+            self._input_shape, dtype=torch.float32, device="cuda"
+        )
+        self._output_bufs = [
+            torch.empty(s, dtype=torch.float32, device="cuda") for s in self._output_shapes
+        ]
 
         logger.info(
             "TRT engine loaded: %s (%.1f MB)",
@@ -421,7 +438,7 @@ class TensorRTEngine(BaseEngine):
         list[np.ndarray]
             List of output tensors from the engine.
         """
-        if self._context is None or self._stream is None:
+        if self._context is None or self._stream is None or self._input_buf is None:
             if self._skipped_reason:
                 return []
             msg = "Engine not loaded. Call load_model() first."
@@ -429,16 +446,16 @@ class TensorRTEngine(BaseEngine):
 
         inputs_np = np.ascontiguousarray(inputs, dtype=np.float32)  # type: ignore[arg-type]
 
-        # Allocate GPU memory via torch tensors
-        input_gpu = torch.as_tensor(inputs_np, device="cuda")
-        self._context.set_tensor_address(self._input_name, input_gpu.data_ptr())
+        # WR-09: copy host input into the persistent CUDA buffer instead of
+        # allocating a fresh tensor per call. The 1000-iteration measurement
+        # loop no longer fragments the CUDA allocator, so vram_peak_mb
+        # reflects steady-state working set instead of allocator churn.
+        self._input_buf.copy_(torch.from_numpy(inputs_np), non_blocking=True)
+        self._context.set_tensor_address(self._input_name, self._input_buf.data_ptr())
 
-        # Allocate output buffers
-        output_tensors: list[torch.Tensor] = []
-        for name, shape in zip(self._output_names, self._output_shapes, strict=True):
-            out_gpu = torch.empty(shape, dtype=torch.float32, device="cuda")
-            self._context.set_tensor_address(name, out_gpu.data_ptr())
-            output_tensors.append(out_gpu)
+        # WR-09: reuse persistent output buffers allocated in _load_engine.
+        for name, out_buf in zip(self._output_names, self._output_bufs, strict=True):
+            self._context.set_tensor_address(name, out_buf.data_ptr())
 
         # Выполнение в изолированном потоке без блокировки GPU-дефолта
         self._context.execute_async_v3(self._stream.cuda_stream)
@@ -447,7 +464,7 @@ class TensorRTEngine(BaseEngine):
         self._stream.synchronize()
 
         # Copy outputs to CPU
-        return [t.cpu().numpy() for t in output_tensors]
+        return [t.cpu().numpy() for t in self._output_bufs]
 
     def postprocess(self, raw_outputs: object, sample: COCOSample) -> Detection:
         """Delegate to adapter for model-specific output parsing.
