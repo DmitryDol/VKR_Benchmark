@@ -51,7 +51,7 @@
 ### Phase 8: RF-DETR Integration & Quantization (Stages 1-6)
 **Goal**: RF-DETR is integrated and fully processed through the 6-stage hardware optimization pipeline
 **Depends on**: Phase 6 (architecture-agnostic engine refactor) and Phase 7 (proven Stage 2-6 patterns on the YOLO family)
-**Requirements**: ADPT-07
+**Requirements**: ADPT-07, OPT-TR-01, OPT-TR-02, OPT-TR-03, OPT-TR-04, OPT-TR-05
 **Canonical refs**: `.planning/phases/06-yolo-family-integration/06-CONTEXT.md`, `.planning/phases/07-yolo-family-quantization-stages-2-6/07-CONTEXT.md`, `CLAUDE.md`
 **Success Criteria** (what must be TRUE):
   1. User can load RF-DETR weights and execute Stage 1 inference (FP32 baseline, TF32 disabled) with output parsing that conforms to the `Detection` standard.
@@ -60,7 +60,13 @@
   4. INT8 calibration (MinMax, Entropy, Percentile) completes for RF-DETR on the project-standard fixed 500-image calibration set (Stage 5).
   5. Mixed Precision (Stage 6 — Strategy A and Strategy B) is applied to RF-DETR with measured mAP and Latency.
   6. RF-DETR's best config across all INT8 calibrators and Mixed Precision strategies lands within 2.0% mAP_50:95 of its FP32 baseline, or the miss is flagged for a user decision (per the D-14/D-15 gate established in Phase 7).
-**Plans**: TBD
+**Plans**: 4 plans
+- [ ] 08-01-PLAN.md — Stage 1 Adapter + Baseline (RFDETRAdapter + CLI MODEL_REGISTRY + compute_macs adapter.input_size fix) [wave 1]
+- [ ] 08-02-PLAN.md — Stage 2 ONNX Export (vendor `m.export(opset=18, shape=(704,704))` + mandatory project simplify_onnx, C-10) + ORT benchmark [wave 2]
+- [ ] 08-03-PLAN.md — Stages 3-4 TensorRT standard precision (TF32 / FP16 / BF16 under strict 2 GB workspace, BF16 on Ampere sm_86) [wave 3]
+- [ ] 08-04-PLAN.md — Stages 5-6 INT8 (3 calibrators) + Mixed Precision (Strategy A + B with D-RF-03 B2 patch to apply_strategy_b) + D-14 2.0% accuracy gate [wave 4]
+
+**Wave sequencing**: Waves run strictly serially (1 → 2 → 3 → 4) — single RTX 3070 + single `--run-id` for the phase. 08-01 (Stage 1, builds RFDETRAdapter + CLI wiring; depends on nothing) → 08-02 (Stage 2, depends on 08-01 for adapter — produces weights/rfdetr-l/rfdetr_l_sim.onnx) → 08-03 (Stages 3-4, depends on 08-02 for ONNX) → 08-04 (Stages 5-6, depends on 08-02 for ONNX and 08-03 for standard-precision baselines). Cross-cutting constraints: strict 2 GB TRT workspace (C-02), BF16 verified via `builder.platform_has_tf32` on Ampere sm_86 (C-04), fixed 500-image calibration set shared by Stage 5 + Stage 6 (C-06 via Phase 7 Plan 07-03 helper), C-10 mandatory `simplify_onnx()` (overrides vendor's deprecated `simplify` kwarg), D-RF-02 = path (a) vendor `m.export(opset=18, shape=(704,704))`, D-RF-03 = B2 (2-line patch to `apply_strategy_b` adding `LayerType.NORMALIZATION` clause — carries forward to Phase 10), D-RF-04 = 704×704 (vendor default, matches AP_50:95=56.5 baseline), C-08 2.0% accuracy gate applied at the 08-04 checkpoint to RF-DETR's BEST configuration across all 3 INT8 + 2 Mixed Precision stages — miss → flagged finding, NO auto Strategy C (ADV-01 deferred).
 
 ### Phase 9: Mid-Project Diploma Data Export
 **Goal**: Aggregate the current benchmark corpus (RT-DETR from v1.0 + YOLO11/26 from Phases 6-7 + RF-DETR from Phase 8) into publication-ready artifacts so the diploma's practical chapter can be written before the remaining models are integrated
@@ -109,8 +115,9 @@
 |-------|----------------|--------|-----------|
 | 6. YOLO Family Integration (Stage 1) | 3/3 | Completed | 2026-05-12 |
 | 7. YOLO Family Quantization (Stages 2-6) | 4/4 | Complete    | 2026-05-15 |
-| 8. RF-DETR Integration & Quantization (Stages 1-6) | 0/0 | Not started | - |
+| 8. RF-DETR Integration & Quantization (Stages 1-6) | 0/4 | Planned | - |
 | 9. Mid-Project Diploma Data Export | 0/0 | Not started | - |
 | 10. D-FINE & DEIMv2 Integration & Quantization (Stages 1-6) | 0/0 | Not started | - |
 | 11. Batch Orchestration & Resource Management | 0/0 | Not started | - |
 | 12. Unified Reporting & Summarization | 0/0 | Not started | - |
+</content>
