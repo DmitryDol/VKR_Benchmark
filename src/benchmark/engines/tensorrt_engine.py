@@ -38,6 +38,39 @@ _MIN_TRT_OUTPUTS: int = 2
 _INPUT_SIZE: tuple[int, int] = (640, 640)
 
 
+def _trt_dtype_to_torch(trt_dtype: object) -> torch.dtype:
+    """Map a TensorRT DataType enum value to the matching torch.dtype.
+
+    Built lazily so the module remains importable when ``tensorrt`` is not
+    installed. Optional TRT enum members (BF16, INT64, UINT8, FP8) are
+    registered only when the linked TRT version exposes them.
+    """
+    if trt is None:
+        msg = "TensorRT not installed. Install with: uv sync --group tensorrt"
+        raise RuntimeError(msg)
+
+    mapping: dict[object, torch.dtype] = {
+        trt.DataType.FLOAT: torch.float32,
+        trt.DataType.HALF: torch.float16,
+        trt.DataType.INT8: torch.int8,
+        trt.DataType.INT32: torch.int32,
+        trt.DataType.BOOL: torch.bool,
+    }
+    optional: tuple[tuple[str, torch.dtype], ...] = (
+        ("BF16", torch.bfloat16),
+        ("INT64", torch.int64),
+        ("UINT8", torch.uint8),
+    )
+    for trt_attr, torch_dt in optional:
+        if hasattr(trt.DataType, trt_attr):
+            mapping[getattr(trt.DataType, trt_attr)] = torch_dt
+
+    if trt_dtype not in mapping:
+        msg = f"Unsupported TRT DataType: {trt_dtype!r}"
+        raise RuntimeError(msg)
+    return mapping[trt_dtype]
+
+
 class _BF16UnsupportedError(Exception):
     """Raised when BF16 build is attempted on unsupported hardware."""
 
@@ -373,25 +406,36 @@ class TensorRTEngine(BaseEngine):
         # Reset metadata before re-population — prevents double-append on retry/reload (CR-01).
         self._output_names = []
         self._output_shapes = []
+        self._output_dtypes: list[torch.dtype] = []
         for i in range(self._engine.num_io_tensors):
             name = self._engine.get_tensor_name(i)
             mode = self._engine.get_tensor_mode(name)
             if mode == trt.TensorIOMode.INPUT:
                 self._input_name = name
                 self._input_shape = tuple(self._engine.get_tensor_shape(name))
+                self._input_dtype: torch.dtype = _trt_dtype_to_torch(
+                    self._engine.get_tensor_dtype(name)
+                )
             else:
                 self._output_names.append(name)
                 self._output_shapes.append(tuple(self._engine.get_tensor_shape(name)))
+                self._output_dtypes.append(
+                    _trt_dtype_to_torch(self._engine.get_tensor_dtype(name))
+                )
 
-        # WR-09: pre-allocate persistent I/O buffers once at load time. infer()
-        # reuses them on every call, replacing the per-call torch.as_tensor /
-        # torch.empty allocations that previously biased vram_peak_mb upward
-        # via allocator fragmentation.
+        # WR-09 + dtype fix: pre-allocate persistent I/O buffers once at load
+        # time using the engine's actual binding dtypes. Detection models emit
+        # mixed-dtype outputs (e.g. RT-DETR: boxes float32, labels int64;
+        # YOLO post-NMS: boxes/scores float32, class_ids int32). Hardcoding
+        # float32 reinterprets integer-typed buffers as floats and corrupts
+        # class labels → all-zero categories → collapsed mAP across every
+        # precision and model.
         self._input_buf = torch.empty(
-            self._input_shape, dtype=torch.float32, device="cuda"
+            self._input_shape, dtype=self._input_dtype, device="cuda"
         )
         self._output_bufs = [
-            torch.empty(s, dtype=torch.float32, device="cuda") for s in self._output_shapes
+            torch.empty(s, dtype=dt, device="cuda")
+            for s, dt in zip(self._output_shapes, self._output_dtypes, strict=True)
         ]
 
         logger.info(
