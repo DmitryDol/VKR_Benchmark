@@ -290,8 +290,17 @@ class ResultLogger:
 
         Reads: results/{model_name}/{run_id}/*.csv (sorted by filename = stage order)
         Writes:
-            results/results.csv   (overwrites with merged content)
-            results/results.json  (overwrites with merged content)
+            results/results.csv                              (aggregated across models)
+            results/results.json                             (aggregated across models)
+            results/{model_name}/{run_id}/summary.txt        (per-model human-readable)
+            results/{model_name}/{run_id}/summary.md         (per-model human-readable)
+
+        The global ``results.csv`` / ``results.json`` files keep rows for every
+        previously merged ``(model_name, stage)`` pair; only the rows whose
+        ``model_name`` column matches the current call are replaced with the
+        freshly merged content. This lets the user call ``benchmark merge`` once
+        per model with the same ``--run-id`` without losing earlier models'
+        rows.
 
         Parameters
         ----------
@@ -327,16 +336,38 @@ class ResultLogger:
         unified_csv = self.output_dir / "results.csv"
         unified_json = self.output_dir / "results.json"
 
-        # Write unified CSV (overwrite)
-        if all_rows:
-            with unified_csv.open("w", newline="", encoding="utf-8") as f:
-                writer = csv.DictWriter(f, fieldnames=all_rows[0].keys())
-                writer.writeheader()
-                writer.writerows(all_rows)
+        # Read existing aggregated rows for OTHER models so we do not clobber
+        # them when merging this model. Rows whose ``model_name`` matches the
+        # current call are dropped — they will be re-added from the freshly
+        # read per-stage CSVs below.
+        existing_other: list[dict[str, object]] = []
+        if unified_csv.exists():
+            with unified_csv.open(newline="", encoding="utf-8") as f:
+                reader = csv.DictReader(f)
+                existing_other = [
+                    r for r in reader if r.get("model_name") != model_name
+                ]
 
-        # Write unified JSON (overwrite)
+        merged_rows: list[dict[str, object]] = [*existing_other, *all_rows]
+
+        # Union of fieldnames preserves current-call schema first, then any
+        # extra keys carried by older rows (schema drift defensive).
+        fieldnames: list[str] = []
+        seen: set[str] = set()
+        for row in merged_rows:
+            for key in row.keys():
+                if key not in seen:
+                    fieldnames.append(key)
+                    seen.add(key)
+
+        if merged_rows:
+            with unified_csv.open("w", newline="", encoding="utf-8") as f:
+                writer = csv.DictWriter(f, fieldnames=fieldnames)
+                writer.writeheader()
+                writer.writerows(merged_rows)
+
         unified_json.write_text(
-            json.dumps(all_rows, indent=2, ensure_ascii=False), encoding="utf-8"
+            json.dumps(merged_rows, indent=2, ensure_ascii=False), encoding="utf-8"
         )
 
         # Extract best stage
@@ -352,9 +383,10 @@ class ResultLogger:
                     exc,
                 )
 
-        # Format text and markdown summaries
-        txt_path = self.output_dir / "summary.txt"
-        md_path = self.output_dir / "summary.md"
+        # Per-model human-readable summary lands under the model's run dir so
+        # repeated merge calls for sibling models do not overwrite each other.
+        txt_path = model_dir / "summary.txt"
+        md_path = model_dir / "summary.md"
 
         headers = ["Stage", "mAP@50:95", "Latency (ms)", "FPS", "Drop %", "Size (MB)"]
         rows = []
