@@ -49,7 +49,18 @@ def apply_strategy_a(network: trt.INetworkDefinition) -> int:
 
 def apply_strategy_b(network: trt.INetworkDefinition) -> int:
     """
-    Strategy B: Apply FP16 to Softmax and LayerNorm nodes.
+    Strategy B: Apply FP16 to Softmax and Normalization (LayerNorm) nodes.
+
+    Marks layers as FP16 if any of:
+      - layer.type == LayerType.SOFTMAX (attention Softmax)
+      - layer.type == LayerType.NORMALIZATION (INormalizationLayer / LayerNorm /
+        GroupNorm, TRT 8.6+)
+      - 'norm' in layer.name.lower() (substring fallback for graphs where the
+        opset < 17 decomposed LayerNorm or used a different naming scheme)
+
+    Phase 8 RF-DETR (D-RF-03 = B2): the explicit LayerType.NORMALIZATION clause
+    hardens the contract against future graphs whose node names don't contain
+    'norm'. Carries forward unchanged to Phase 10 (D-FINE, DEIMv2).
     """
     count = 0
     for i in range(network.num_layers):
@@ -57,7 +68,12 @@ def apply_strategy_b(network: trt.INetworkDefinition) -> int:
         if is_constant_or_shape(layer):
             continue
 
-        if layer.type == trt.LayerType.SOFTMAX or "norm" in layer.name.lower():
+        # D-RF-03 B2: NORMALIZATION clause added to the type set so
+        # INormalizationLayer (TRT 8.6+ native LayerNorm) is caught
+        # name-agnostically alongside SOFTMAX. The substring fallback
+        # still covers opset<17 decomposed-LayerNorm graphs.
+        if layer.type in {trt.LayerType.SOFTMAX, trt.LayerType.NORMALIZATION} \
+                or "norm" in layer.name.lower():
             layer.precision = trt.float16
             layer.set_output_type(0, trt.float16)
             count += 1
