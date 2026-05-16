@@ -104,20 +104,26 @@ unchanged to RF-DETR:
   inspect the `rfdetr` package's own `export()` API in `RESEARCH.md` and
   answer:
   1. What does `rfdetr.export()` produce? (output tensor names + shapes,
-     opset, dynamic axes, internal optimizations already applied)
-  2. Does it support `opset=17` (required for the `LayerNormalization`
-     op — see D-RF-03)?
+     opset version, dynamic axes, internal optimizations already applied)
+  2. Does it produce **opset >= 18** to match the project's transformer-
+     export convention (`src/benchmark/engines/onnx_export.py` default
+     `opset_version=18`; RT-DETR forced the upgrade from 17 → 18 because
+     some HF RT-DETR ops are not supported at opset 17 and torch auto-
+     promoted them anyway)? If vendor exports at a lower opset, the
+     researcher must confirm whether re-exporting at 18 is safe.
   3. Does the DINOv2 backbone trace cleanly via the project's own
      `torch.onnx.export` + a thin `nn.Module` wrapper (the pattern used for
-     RT-DETR in `rtdetr_adapter.py:RTDetrONNXWrapper`), or are there
+     RT-DETR in `rtdetr_adapter.py:RTDetrONNXWrapper`, called from
+     `scripts/export_rtdetr_onnx.py` with `opset_version=18`), or are there
      non-traceable ops (position-embedding interpolation, `nn.functional`
      calls) that force the vendor exporter?
   Then recommend one of: **(a)** `rfdetr.export()` + project `simplify_onnx()`
-  (preferred if vendor exporter is clean), or **(b)** project's
-  `torch.onnx.export(opset=17)` + custom wrapper + `simplify_onnx()` (if
-  vendor exporter is opaque/unsuitable). The planner locks the choice in
-  the relevant plan. **Rule C-10 (mandatory onnxsim) overrides any vendor
-  "already simplified" claim** — onnxsim runs.
+  (preferred if vendor exporter is clean **and** lands at opset >= 18), or
+  **(b)** project's `torch.onnx.export(opset_version=18)` + custom wrapper
+  + `simplify_onnx()` (if vendor exporter is opaque/unsuitable, or stuck on
+  an opset < 18). The planner locks the choice in the relevant plan.
+  **Rule C-10 (mandatory onnxsim) overrides any vendor "already simplified"
+  claim** — onnxsim runs.
 
 ### Mixed Precision Strategy B on a True Transformer
 - **D-RF-03:** **Decision deferred to the researcher.** RF-DETR is a real
@@ -139,10 +145,13 @@ unchanged to RF-DETR:
      - **(B1)** Run current heuristic as-is; if Strategy B fails to beat
        plain INT8, accept as a **flagged finding** (parallel to YOLO11
        Phase 7 outcome) — no code change.
-     - **(B2)** Force `opset=17` export so PyTorch emits a single
-       `LayerNormalization` op (TRT 10.x recognises it as
-       `INormalizationLayer`); minimal heuristic extension to mark those
-       layers — works for RF-DETR and is reusable in Phase 10.
+     - **(B2)** Rely on the existing `opset=18` transformer-export path
+       (project default in `onnx_export.py`; opset 17 introduced the
+       `LayerNormalization` op, opset 18 inherits it) — confirm PyTorch
+       actually emits LayerNorm as a single `LayerNormalization` node at
+       that opset, then TRT 10.x recognises it as `INormalizationLayer`
+       and only a minimal heuristic extension is needed to mark those
+       layers. Works for RF-DETR and is reusable in Phase 10.
      - **(B3)** Extend `apply_strategy_b()` with a subgraph-pattern matcher
        (ReduceMean → Sub → Pow → ReduceMean → Add → Sqrt → Div → Mul → Add)
        when single-node LayerNorm isn't produced. Costlier; reuse in Phase 10.
@@ -252,8 +261,15 @@ None — the `cross_reference_todos` check surfaced only the pre-existing
   `apply_strategy_b()`, `is_constant_or_shape()` helper. **D-RF-03 may extend
   this file.**
 - `src/benchmark/engines/onnx_export.py` — `simplify_onnx()` (the mandatory
-  C-10 step), `export_to_onnx()`, `export_yolo_to_onnx()` for the
-  ultralytics-flavoured path. **No `export_rfdetr_to_onnx()` exists yet.**
+  C-10 step), `export_to_onnx()` / `export_and_simplify()` (transformer path,
+  **default `opset_version=18`**; this is what RT-DETR uses and what
+  RF-DETR should use unless researcher's investigation in D-RF-02 finds a
+  reason to deviate), `export_yolo_to_onnx()` for the ultralytics-flavoured
+  path (opset=17). **No `export_rfdetr_to_onnx()` exists yet.**
+- `scripts/export_rtdetr_onnx.py` — Reference for the RT-DETR ONNX export
+  flow (`opset_version=18`, wrapper around `RTDetrForObjectDetection`,
+  followed by `simplify_onnx()`). Closest precedent for RF-DETR if D-RF-02
+  picks the in-project export path.
 - `src/benchmark/engines/onnx_engine.py` — Stage 2 ORT inference engine.
 - `src/benchmark/models/rtdetr_adapter.py` — **Primary template for the new
   `rfdetr_adapter.py`.** Reuse the `RTDetrONNXWrapper` pattern for the

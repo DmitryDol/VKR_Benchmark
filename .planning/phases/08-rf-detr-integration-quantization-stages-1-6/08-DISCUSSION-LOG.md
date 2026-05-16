@@ -79,7 +79,7 @@ rationale.
 | Option | Description | Selected |
 |--------|-------------|----------|
 | `rfdetr.export()` + project's `simplify_onnx()` | Vendor exporter handles DINOv2 quirks, project's onnxsim keeps graph-optimizer uniform across all models | |
-| Project's `torch.onnx.export(opset=17)` + `nn.Module` wrapper + `simplify_onnx()` (RT-DETR style) | Unifies approach across all transformer detectors; risk of DINOv2 non-traceable ops | |
+| Project's `torch.onnx.export(opset_version=18)` + `nn.Module` wrapper + `simplify_onnx()` (RT-DETR style — matches project default in `onnx_export.py` and `scripts/export_rtdetr_onnx.py`; RT-DETR forced the 17 → 18 upgrade so the transformer family is standardized on 18) | Unifies approach across all transformer detectors; risk of DINOv2 non-traceable ops | |
 | `rfdetr.export()` without `simplify_onnx()` | Violates CLAUDE.md mandatory-onnxsim rule | |
 | Researcher inspects `rfdetr.export()` API first, then recommends | Defer to RESEARCH.md | ✓ |
 
@@ -97,7 +97,7 @@ exporter claims.
 |--------|-------------|----------|
 | Run current `apply_strategy_b()` heuristic as-is; flag a Strategy-B miss under D-15 | Cleanest experiment; mirrors the Phase 7 YOLO outcome stance | |
 | Extend the heuristic with a subgraph-pattern matcher for decomposed LayerNorm (Reduce+ElementWise+Pow…) | Works on RF-DETR and reusable for Phase 10 | |
-| Force opset 17 so PyTorch emits `LayerNormalization` as a single op; minimal heuristic extension to mark it | Cheaper; depends on D-RF-02 outcome | |
+| Rely on the existing `opset=18` transformer-export path (LayerNormalization op available since opset 17, inherited in 18 — the project default for transformer export) and add a minimal heuristic extension to mark the single-node LayerNorm | Cheaper if PyTorch actually emits LayerNorm as one node at opset 18; depends on D-RF-02 outcome | |
 | Researcher inspects ONNX graph + TRT layer types, then recommends | Defer to RESEARCH.md | ✓ |
 
 **User's choice:** Researcher inspects the actual TRT graph and recommends.
