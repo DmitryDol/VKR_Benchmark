@@ -28,6 +28,18 @@ dependencies = [
     "rfdetr>=1.6.5.post0",
     "supervision>=0.27.0.post2",
     "roboflow>=1.3.8",
+    "coloredlogs>=15.0.1",
+    "flatbuffers>=25.12.19",
+    "packaging>=26.2",
+    "protobuf>=7.34.1",
+    "sympy>=1.14.0",
+    # CUDA 12 runtime libs for onnxruntime-gpu's CUDA EP. ORT 1.26 is built
+    # against CUDA 12.x; the project's torch ships CUDA 13.x, so ORT cannot
+    # reuse torch's bundled libs. These provide cudart/cuDNN/cuBLAS 12.x.
+    "nvidia-cuda-runtime-cu12>=12.9.79",
+    "nvidia-cudnn-cu12>=9.22.0.52",
+    "nvidia-cublas-cu12>=12.9.2.10",
+    "nvidia-cufft-cu12>=11.4.1.4",
 ]
 
 [project.scripts]

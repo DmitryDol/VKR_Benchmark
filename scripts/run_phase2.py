@@ -71,15 +71,23 @@ def main() -> None:
     # Stage 1: PyTorch FP32
     print("=== Stage 1: PyTorch FP32 ===")
     adapter = RTDETRAdapter()
-    engine = PyTorchEngine(model_name="rt-detr", adapter=adapter)
-    engine.load_model(Path("weights/rtdetr-r50vd/"))
-    macs, flops = compute_macs(engine.model, "rt-detr")
-    result1 = engine.run_full_benchmark(
-        dataloader,
-        stage="1_pytorch_fp32",
-        macs=macs,
-        flops=flops,
+    engine = PyTorchEngine(
+        model_name="rt-detr",
+        adapter=adapter,
+        device="cuda",
+        score_threshold=0.01,
     )
+    engine.reset_vram_tracking()
+    engine.load_model(Path("weights/rtdetr-r50vd/"))
+
+    # Run benchmark BEFORE computing MACs to avoid potential state side-effects (FIX-01)
+    result1 = engine.run_full_benchmark(dataloader, baseline_map_50_95=0.0)
+
+    # Compute MACs after benchmark (D-09, matching Phase 1 pattern)
+    macs, flops = compute_macs(engine.model, "rt-detr")
+    result1.macs = macs
+    result1.flops = flops
+
     result_logger.add(result1)
     csv1, json1 = result_logger.save_stage_files(result1)
     print(f"Stage 1 files: {csv1}, {json1}")
@@ -93,11 +101,16 @@ def main() -> None:
     print("Stage 1 field validation: PASS")
 
     # Stage 2: ONNX FP32
-    onnx_path = Path("weights/rtdetr-r50/rtdetr_r50_sim.onnx")
+    # Fix path: weights/rtdetr-r50vd/ (matching Stage 1 download)
+    onnx_path = Path("weights/rtdetr-r50vd/rtdetr_r50_sim.onnx")
     if onnx_path.exists():
         print("=== Stage 2: ONNX FP32 ===")
+        adapter = RTDETRAdapter()
         engine_onnx = OnnxRuntimeEngine(
-            model_name="rt-detr", onnx_path=onnx_path, input_size=(640, 640)
+            model_name="rt-detr",
+            adapter=adapter,
+            onnx_path=onnx_path,
+            input_size=(640, 640),
         )
         engine_onnx.load_model(onnx_path)
         result2 = engine_onnx.run_full_benchmark(

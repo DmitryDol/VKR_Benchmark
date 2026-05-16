@@ -142,7 +142,7 @@ def main() -> int:
         result.macs = total_flops / 2.0
         result.flops = total_flops
         logger.info("MACs: %.2f G | FLOPs: %.2f G", result.macs / 1e9, result.flops / 1e9)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.warning("MACs/FLOPs skipped: %s", exc)
 
     logger.info(

@@ -8,6 +8,7 @@ Commands:
 
 from __future__ import annotations
 
+import json
 import logging
 import sys
 from pathlib import Path
@@ -17,6 +18,7 @@ import typer
 
 from benchmark.data.coco_loader import COCODataLoader
 from benchmark.engines.onnx_engine import OnnxRuntimeEngine
+from benchmark.engines.onnx_export import export_yolo_to_onnx
 from benchmark.engines.pytorch_engine import PyTorchEngine
 from benchmark.engines.tensorrt_engine import TensorRTEngine
 from benchmark.utils.hardware import HardwareInfo
@@ -28,6 +30,28 @@ app = typer.Typer(
     help="VKR transformer object detection benchmark pipeline.",
     add_completion=False,
 )
+
+# Phase 7 D-07 / D-08: the INT8 calibration set is fixed at 500 COCO val2017 images
+# and is the SAME 500 across all three calibrators (MinMax, Entropy, Percentile) and
+# across both Stage 5 and Stage 6 — the calibrator algorithm (or mixed-precision
+# strategy) must be the only variable. COCODataLoader is deterministic by
+# construction: `__post_init__` does `sorted(self._coco.getImgIds())[:limit]` (no
+# shuffle, no seed), so `COCODataLoader(limit=500)` returns the identical 500
+# image_ids in the identical order on every construction. This module-level
+# constant + helper centralizes that contract so Stages 5 and 6 share one
+# call-site (Plan 07-03, Task 1).
+_CALIBRATION_IMAGE_COUNT: int = 500
+
+
+def _build_calibration_dataloader() -> COCODataLoader:
+    """Build the single canonical calibration dataloader (Plan 07-03, D-07/D-08).
+
+    Returns a :class:`COCODataLoader` limited to the first
+    ``_CALIBRATION_IMAGE_COUNT`` image_ids in COCO's stable sorted order — the
+    same 500 images, deterministically, used by all three INT8 calibrators and by
+    the Stage 6 mixed-precision rebuilds.
+    """
+    return COCODataLoader(limit=_CALIBRATION_IMAGE_COUNT)
 
 # CLI-01 / CLI-02 stage registry — ordered list for --all-stages
 # Stage 1 and 2 only in Phase 2; later phases append stages 3-6
@@ -51,6 +75,16 @@ MODEL_REGISTRY: dict[str, dict[str, str]] = {
         "weights": "weights/rtdetr-r50vd/",
         "onnx": "weights/rtdetr-r50vd/rtdetr_r50_sim.onnx",
         "family": "detr",  # routes MACs computation
+    },
+    "yolo11l": {
+        "weights": "weights/yolo11l/yolo11l.pt",
+        "onnx": "weights/yolo11l/yolo11l_sim.onnx",
+        "family": "yolo",
+    },
+    "yolo26l": {
+        "weights": "weights/yolo26l/yolo26l.pt",
+        "onnx": "weights/yolo26l/yolo26l_sim.onnx",
+        "family": "yolo",
     },
 }
 
@@ -80,11 +114,18 @@ def _get_adapter(model_name: str) -> object:
             msg = f"RTDETRAdapter not available: {exc}"
             raise typer.BadParameter(msg) from exc
         return RTDETRAdapter()
+
+    if model_name in ("yolo11l", "yolo26l"):
+        from benchmark.models.yolo_adapter import YOLOAdapter  # noqa: PLC0415
+
+        is_nms_free = model_name == "yolo26l"
+        return YOLOAdapter(is_nms_free=is_nms_free)
+
     msg = f"Unknown model '{model_name}'. Available: {list(MODEL_REGISTRY)}"
     raise typer.BadParameter(msg)
 
 
-def _run_stage(
+def _run_stage(  # noqa: PLR0912, PLR0915
     model_name: str,
     stage: str,
     limit: int | None,
@@ -97,9 +138,9 @@ def _run_stage(
 ) -> tuple[float, float, float]:
     """Execute a single benchmark stage. Returns (map_50_95, macs, flops)."""
     dataloader = COCODataLoader(limit=limit)
+    adapter = _get_adapter(model_name)
 
     if stage == "1_pytorch_fp32":
-        adapter = _get_adapter(model_name)
         engine = PyTorchEngine(model_name=model_name, adapter=adapter)  # type: ignore[arg-type]
         weights_path = Path(MODEL_REGISTRY[model_name]["weights"])
         engine.load_model(weights_path)
@@ -123,16 +164,27 @@ def _run_stage(
     elif stage == "2_onnx_fp32":
         onnx_path = Path(MODEL_REGISTRY[model_name]["onnx"])
         if not onnx_path.exists():
-            logging.warning(
-                "ONNX model not found at %s — run stage 1 first to export it",
-                onnx_path,
-            )
-            msg = f"ONNX model missing: {onnx_path}"
-            raise FileNotFoundError(msg)
+            if MODEL_REGISTRY[model_name].get("family") == "yolo":
+                logging.info(
+                    "ONNX model not found at %s — exporting from .pt weights on demand",
+                    onnx_path,
+                )
+                export_yolo_to_onnx(
+                    weights_path=Path(MODEL_REGISTRY[model_name]["weights"]),
+                    output_path=onnx_path,
+                )
+            else:
+                logging.warning(
+                    "ONNX model not found at %s — run stage 1 first to export it",
+                    onnx_path,
+                )
+                msg = f"ONNX model missing: {onnx_path}"
+                raise FileNotFoundError(msg)
 
         engine_onnx = OnnxRuntimeEngine(
             model_name=model_name,
             onnx_path=onnx_path,
+            adapter=adapter,  # type: ignore[arg-type]
             input_size=(640, 640),
         )
         engine_onnx.load_model(onnx_path)  # weights_path ignored by OnnxRuntimeEngine
@@ -161,6 +213,7 @@ def _run_stage(
             model_name=model_name,
             precision=precision,
             engine_dir=engine_dir,
+            adapter=adapter,  # type: ignore[arg-type]
             force_rebuild=force_rebuild,
         )
         engine.load_model(onnx_path)
@@ -185,12 +238,15 @@ def _run_stage(
             msg = f"ONNX model missing: {onnx_path} — run stage 2 first"
             raise FileNotFoundError(msg)
 
-        # Fixed 500-image calibration dataloader (D-06: first 500 in iteration order)
-        cal_dataloader = COCODataLoader(limit=500)
+        # D-07/D-08: single shared 500-image calibration dataloader (see
+        # _build_calibration_dataloader docstring). MUST be the identical call for
+        # both Stage 5 and Stage 6 so the calibrator algorithm is the only variable.
+        cal_dataloader = _build_calibration_dataloader()
 
         engine = TensorRTEngine(
             model_name=model_name,
             precision="int8",
+            adapter=adapter,  # type: ignore[arg-type]
             calibrator_method=cal_method,  # type: ignore[arg-type]
             engine_dir=engine_dir,
             force_rebuild=force_rebuild,
@@ -206,15 +262,18 @@ def _run_stage(
         )
 
     elif stage in ("6_trt_mixed_a", "6_trt_mixed_b"):
-        import json
-        
         strategy = "a" if stage == "6_trt_mixed_a" else "b"
         onnx_path = Path(MODEL_REGISTRY[model_name]["onnx"])
         if not onnx_path.exists():
             msg = f"ONNX model missing: {onnx_path} — run stage 2 first"
             raise FileNotFoundError(msg)
 
-        best_calibrator_file = result_logger.output_dir / model_name / result_logger.run_id / "int8_best_calibrator.json"
+        best_calibrator_file = (
+            result_logger.output_dir
+            / model_name
+            / result_logger.run_id
+            / "int8_best_calibrator.json"
+        )
         if best_calibrator_file.exists():
             try:
                 cal_data = json.loads(best_calibrator_file.read_text(encoding="utf-8"))
@@ -226,11 +285,13 @@ def _run_stage(
             logging.warning("int8_best_calibrator.json missing, fallback to entropy")
             calibrator = "entropy"
 
-        cal_dataloader = COCODataLoader(limit=500)
+        # D-07/D-08: same 500-image calibration set as Stage 5 (see helper docstring)
+        cal_dataloader = _build_calibration_dataloader()
 
         engine = TensorRTEngine(
             model_name=model_name,
             precision="int8",
+            adapter=adapter,  # type: ignore[arg-type]
             calibrator_method=calibrator,
             engine_dir=engine_dir,
             force_rebuild=force_rebuild,
@@ -350,6 +411,7 @@ def run_benchmark(
             if s in ("5_trt_int8_minmax", "5_trt_int8_entropy", "5_trt_int8_percentile"):
                 result_logger.save_int8_best_calibrator(model)
         except Exception as exc:
+            logging.getLogger(__name__).exception("Stage %s failed", s)
             typer.echo(f"Stage {s} failed: {exc}", err=True)
             raise typer.Exit(code=1) from exc
 

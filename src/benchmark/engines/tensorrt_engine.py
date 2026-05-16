@@ -9,14 +9,15 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from typing import TYPE_CHECKING, Literal
 
 import numpy as np
 import torch
 from PIL import Image
 
-from benchmark.data.coco_loader import COCO_80_TO_91
 from benchmark.engines.base import MEASURE_RUNS, WARMUP_RUNS, BaseEngine, Detection
+from benchmark.engines.pytorch_engine import ModelAdapter
 from benchmark.utils.logger import BenchmarkResult
 
 try:
@@ -37,6 +38,39 @@ _MIN_TRT_OUTPUTS: int = 2
 _INPUT_SIZE: tuple[int, int] = (640, 640)
 
 
+def _trt_dtype_to_torch(trt_dtype: object) -> torch.dtype:
+    """Map a TensorRT DataType enum value to the matching torch.dtype.
+
+    Built lazily so the module remains importable when ``tensorrt`` is not
+    installed. Optional TRT enum members (BF16, INT64, UINT8, FP8) are
+    registered only when the linked TRT version exposes them.
+    """
+    if trt is None:
+        msg = "TensorRT not installed. Install with: uv sync --group tensorrt"
+        raise RuntimeError(msg)
+
+    mapping: dict[object, torch.dtype] = {
+        trt.DataType.FLOAT: torch.float32,
+        trt.DataType.HALF: torch.float16,
+        trt.DataType.INT8: torch.int8,
+        trt.DataType.INT32: torch.int32,
+        trt.DataType.BOOL: torch.bool,
+    }
+    optional: tuple[tuple[str, torch.dtype], ...] = (
+        ("BF16", torch.bfloat16),
+        ("INT64", torch.int64),
+        ("UINT8", torch.uint8),
+    )
+    for trt_attr, torch_dt in optional:
+        if hasattr(trt.DataType, trt_attr):
+            mapping[getattr(trt.DataType, trt_attr)] = torch_dt
+
+    if trt_dtype not in mapping:
+        msg = f"Unsupported TRT DataType: {trt_dtype!r}"
+        raise RuntimeError(msg)
+    return mapping[trt_dtype]
+
+
 class _BF16UnsupportedError(Exception):
     """Raised when BF16 build is attempted on unsupported hardware."""
 
@@ -47,7 +81,7 @@ class TensorRTEngine(BaseEngine):
     Builds TRT engines from ONNX models in TF32, FP16, BF16, or INT8 precision.
     Engines are cached to disk and reused on subsequent runs unless
     ``force_rebuild=True`` is set.  INT8 builds also cache the calibration table
-    to ``{engine_dir}/rtdetr_int8_{calibrator_method}.cache``.
+    to ``{engine_dir}/{model_token}_int8_{calibrator_method}.cache``.
 
     Parameters
     ----------
@@ -57,6 +91,8 @@ class TensorRTEngine(BaseEngine):
         TensorRT precision mode.
     engine_dir : Path
         Directory to cache serialized .engine files.
+    adapter : ModelAdapter
+        Model-specific adapter for loading and output parsing.
     force_rebuild : bool
         Force engine rebuild even if cached .engine file exists.
         For INT8, also deletes the calibration cache so calibration reruns.
@@ -71,12 +107,14 @@ class TensorRTEngine(BaseEngine):
         model_name: str,
         precision: Literal["tf32", "fp16", "bf16", "int8"],
         engine_dir: Path,
+        adapter: ModelAdapter,
         force_rebuild: bool = False,
         calibrator_method: Literal["minmax", "entropy", "percentile"] | None = None,
-        score_threshold: float = 0.01,
+        score_threshold: float = 0.001,
         mixed_strategy: Literal["a", "b"] | None = None,
     ) -> None:
         super().__init__(model_name, engine_type="tensorrt", precision=precision)
+        self._adapter = adapter
         self._engine_dir = engine_dir
         self._force_rebuild = force_rebuild
         self._calibrator_method: Literal["minmax", "entropy", "percentile"] | None = (
@@ -85,19 +123,35 @@ class TensorRTEngine(BaseEngine):
         self._score_threshold = score_threshold
         self._mixed_strategy: Literal["a", "b"] | None = mixed_strategy
 
+        # T-07-03: sanitize model_name to alphanumeric/underscore only before using in
+        # filenames, preventing path separator injection into engine_dir.
+        # Dashes are replaced so rt-detr -> rt_detr (safe filesystem token).
+        model_token: str = re.sub(r"[^A-Za-z0-9_]", "_", self.model_name)
+
         if precision == "int8":
             if calibrator_method is None:
                 msg = "calibrator_method is required when precision='int8'"
                 raise ValueError(msg)
             if mixed_strategy is not None:
                 self._engine_path = (
-                    engine_dir / f"rtdetr_mixed_{mixed_strategy}_{calibrator_method}.engine"
+                    engine_dir / f"{model_token}_mixed_{mixed_strategy}_{calibrator_method}.engine"
                 )
             else:
-                self._engine_path = engine_dir / f"rtdetr_int8_{calibrator_method}.engine"
-            self._cache_path: Path | None = engine_dir / f"rtdetr_int8_{calibrator_method}.cache"
+                self._engine_path = engine_dir / f"{model_token}_int8_{calibrator_method}.engine"
+            # CR-03: cache file path is namespaced per calibrator method
+            # (minmax/entropy/percentile). TRT cache tables produced by
+            # IInt8LegacyCalibrator (Percentile) are NOT interchangeable with
+            # IInt8EntropyCalibrator2 (Entropy/MinMax); the per-method file
+            # name guarantees cache isolation across algorithms. Stage 6
+            # mixed-precision rebuilds share the Stage 5 cache by design
+            # (D-07/D-08) — the engine filename differs by mixed_strategy
+            # while the cache filename omits mixed_strategy so a/b can reuse
+            # the same calibration table.
+            self._cache_path: Path | None = (
+                engine_dir / f"{model_token}_int8_{calibrator_method}.cache"
+            )
         else:
-            self._engine_path = engine_dir / f"rtdetr_{precision}.engine"
+            self._engine_path = engine_dir / f"{model_token}_{precision}.engine"
             self._cache_path = None
 
         self._calibration_dataloader: COCODataLoader | None = None
@@ -107,8 +161,13 @@ class TensorRTEngine(BaseEngine):
         self._stream: torch.cuda.Stream | None = None
         self._skipped_reason: str = ""
         self._input_name: str = ""
+        self._input_shape: tuple[int, ...] = ()
         self._output_names: list[str] = []
         self._output_shapes: list[tuple[int, ...]] = []
+        # WR-09: pre-allocated persistent I/O buffers; populated by _load_engine
+        # and reused on every infer() call to avoid 1000 CUDA allocs/run.
+        self._input_buf: torch.Tensor | None = None
+        self._output_bufs: list[torch.Tensor] = []
 
     def load_model(
         self,
@@ -293,6 +352,7 @@ class TensorRTEngine(BaseEngine):
             self._calibrator_method,
             self._calibration_dataloader,
             self._cache_path,
+            adapter=self._adapter,
         )
 
         # Включение FP16 как Fallback для INT8.
@@ -343,14 +403,40 @@ class TensorRTEngine(BaseEngine):
 
         self._stream = torch.cuda.Stream()
 
+        # Reset metadata before re-population — prevents double-append on retry/reload (CR-01).
+        self._output_names = []
+        self._output_shapes = []
+        self._output_dtypes: list[torch.dtype] = []
         for i in range(self._engine.num_io_tensors):
             name = self._engine.get_tensor_name(i)
             mode = self._engine.get_tensor_mode(name)
             if mode == trt.TensorIOMode.INPUT:
                 self._input_name = name
+                self._input_shape = tuple(self._engine.get_tensor_shape(name))
+                self._input_dtype: torch.dtype = _trt_dtype_to_torch(
+                    self._engine.get_tensor_dtype(name)
+                )
             else:
                 self._output_names.append(name)
                 self._output_shapes.append(tuple(self._engine.get_tensor_shape(name)))
+                self._output_dtypes.append(
+                    _trt_dtype_to_torch(self._engine.get_tensor_dtype(name))
+                )
+
+        # WR-09 + dtype fix: pre-allocate persistent I/O buffers once at load
+        # time using the engine's actual binding dtypes. Detection models emit
+        # mixed-dtype outputs (e.g. RT-DETR: boxes float32, labels int64;
+        # YOLO post-NMS: boxes/scores float32, class_ids int32). Hardcoding
+        # float32 reinterprets integer-typed buffers as floats and corrupts
+        # class labels → all-zero categories → collapsed mAP across every
+        # precision and model.
+        self._input_buf = torch.empty(
+            self._input_shape, dtype=self._input_dtype, device="cuda"
+        )
+        self._output_bufs = [
+            torch.empty(s, dtype=dt, device="cuda")
+            for s, dt in zip(self._output_shapes, self._output_dtypes, strict=True)
+        ]
 
         logger.info(
             "TRT engine loaded: %s (%.1f MB)",
@@ -360,16 +446,24 @@ class TensorRTEngine(BaseEngine):
 
         try:
             analyze_engine_precision(self._engine_path)
-        except Exception as e:
+        except (RuntimeError, json.JSONDecodeError, KeyError, AttributeError) as e:
             logger.warning("Failed to analyze engine precision: %s", e)
 
     def preprocess(self, sample: COCOSample) -> np.ndarray:
-        """Resize image and convert to (1, 3, H, W) float32 numpy array.
+        """Resize image and convert to model input tensor using adapter.
 
-        Matches OnnxRuntimeEngine preprocessing: resize to 640x640,
-        scale to [0, 1], no ImageNet normalization (RT-DETR convention).
+        If the adapter exposes a ``preprocess`` method (e.g. YOLO letterbox),
+        delegate to it and return the tensor as a CPU numpy array. Otherwise
+        fall back to the generic stretch-resize used by RT-DETR.
+
+        Returns (1, 3, H, W) float32 numpy array.
         """
-        h, w = _INPUT_SIZE
+        adapter_pre = getattr(self._adapter, "preprocess", None)
+        if callable(adapter_pre):
+            tensor = adapter_pre(sample, device=None)
+            return tensor.cpu().numpy().astype(np.float32)
+
+        h, w = self._adapter.input_size
         img = Image.fromarray(sample.image).resize((w, h), Image.BILINEAR)
         arr = np.array(img, dtype=np.float32) / 255.0  # HWC, [0, 1]
         arr = arr.transpose(2, 0, 1)  # CHW
@@ -386,9 +480,9 @@ class TensorRTEngine(BaseEngine):
         Returns
         -------
         list[np.ndarray]
-            [logits, pred_boxes] matching OnnxRuntimeEngine output format.
+            List of output tensors from the engine.
         """
-        if self._context is None or self._stream is None:
+        if self._context is None or self._stream is None or self._input_buf is None:
             if self._skipped_reason:
                 return []
             msg = "Engine not loaded. Call load_model() first."
@@ -396,16 +490,20 @@ class TensorRTEngine(BaseEngine):
 
         inputs_np = np.ascontiguousarray(inputs, dtype=np.float32)  # type: ignore[arg-type]
 
-        # Allocate GPU memory via torch tensors
-        input_gpu = torch.as_tensor(inputs_np, device="cuda")
-        self._context.set_tensor_address(self._input_name, input_gpu.data_ptr())
+        # WR-12: serialize the H2D input copy on the SAME stream TRT executes
+        # on. The previous code queued the async copy on the default stream
+        # while TRT ran on self._stream; nothing synchronised the two and TRT
+        # could start reading the input buffer before the upload finished,
+        # producing partial/stale input → silent global mAP collapse on every
+        # TRT stage and model. The stream context makes the copy and execute
+        # run in stream order, preserving WR-09's allocator-churn benefit.
+        with torch.cuda.stream(self._stream):
+            self._input_buf.copy_(torch.from_numpy(inputs_np), non_blocking=True)
+        self._context.set_tensor_address(self._input_name, self._input_buf.data_ptr())
 
-        # Allocate output buffers
-        output_tensors: list[torch.Tensor] = []
-        for name, shape in zip(self._output_names, self._output_shapes, strict=True):
-            out_gpu = torch.empty(shape, dtype=torch.float32, device="cuda")
-            self._context.set_tensor_address(name, out_gpu.data_ptr())
-            output_tensors.append(out_gpu)
+        # WR-09: reuse persistent output buffers allocated in _load_engine.
+        for name, out_buf in zip(self._output_names, self._output_bufs, strict=True):
+            self._context.set_tensor_address(name, out_buf.data_ptr())
 
         # Выполнение в изолированном потоке без блокировки GPU-дефолта
         self._context.execute_async_v3(self._stream.cuda_stream)
@@ -414,61 +512,24 @@ class TensorRTEngine(BaseEngine):
         self._stream.synchronize()
 
         # Copy outputs to CPU
-        return [t.cpu().numpy() for t in output_tensors]
+        return [t.cpu().numpy() for t in self._output_bufs]
 
     def postprocess(self, raw_outputs: object, sample: COCOSample) -> Detection:
-        """Parse TRT RT-DETR outputs to Detection.
+        """Delegate to adapter for model-specific output parsing.
 
-        RT-DETR model outputs two tensors:
-          - logits: (1, num_queries, num_classes)
-          - pred_boxes: (1, num_queries, 4) in [cx, cy, w, h] normalized
-
-        Identical to OnnxRuntimeEngine.postprocess.
+        Parameters
+        ----------
+        raw_outputs : object
+            List of numpy arrays from inference.
+        sample : COCOSample
+            Original image metadata.
         """
-        if not isinstance(raw_outputs, list) or len(raw_outputs) < _MIN_TRT_OUTPUTS:
-            msg = f"Unexpected TRT output format: {type(raw_outputs)}"
-            raise RuntimeError(msg)
-
-        logits: np.ndarray = raw_outputs[0][0]  # (num_queries, num_classes)
-        pred_boxes: np.ndarray = raw_outputs[1][0]  # (num_queries, 4) cx cy w h norm
-
-        # Softmax scores + argmax labels
-        exp_logits = np.exp(logits - logits.max(axis=-1, keepdims=True))
-        probs = exp_logits / exp_logits.sum(axis=-1, keepdims=True)
-        scores = probs.max(axis=-1)  # (num_queries,)
-        labels = probs.argmax(axis=-1).astype(np.int64)  # (num_queries,)
-
-        # Filter by score threshold
-        keep = scores >= self._score_threshold
-        scores = scores[keep]
-        labels = labels[keep]
-        boxes_norm = pred_boxes[keep]  # (N, 4) cx cy w h normalized
-
-        # Convert cx cy w h -> x1 y1 x2 y2 in original pixel space
-        orig_h, orig_w = sample.original_size
-        cx, cy, w, h = (
-            boxes_norm[:, 0] * orig_w,
-            boxes_norm[:, 1] * orig_h,
-            boxes_norm[:, 2] * orig_w,
-            boxes_norm[:, 3] * orig_h,
+        return self._adapter.parse_outputs(
+            raw_outputs,
+            original_size=sample.original_size,
+            input_size=self._adapter.input_size,
+            score_threshold=self._score_threshold,
         )
-        x1 = cx - w / 2
-        y1 = cy - h / 2
-        x2 = cx + w / 2
-        y2 = cy + h / 2
-        boxes = np.stack([x1, y1, x2, y2], axis=1).astype(np.float32)
-
-        # Labels from model are 0-indexed (80 classes) -> map to COCO 91-class IDs
-        coco_labels = np.array(
-            [COCO_80_TO_91.get(int(lbl), int(lbl)) for lbl in labels], dtype=np.int64
-        )
-
-        return Detection(
-            boxes=boxes.reshape(-1, 4),
-            scores=scores.astype(np.float32),
-            labels=coco_labels,
-        )
-
     @property
     def model_size_mb(self) -> float:
         """TRT engine file size in MB."""
@@ -565,16 +626,21 @@ def analyze_engine_precision(engine_path: Path) -> dict[str, int | float]:
     Raises
     ------
     RuntimeError
-        Если движок не удалось десериализовать.
+        Если движок не удалось десериализовать, либо если TensorRT не установлен.
     """
+    if trt is None:
+        msg = "TensorRT not installed. Install with: uv sync --group tensorrt"
+        raise RuntimeError(msg)
+
     trt_logger = trt.Logger(trt.Logger.WARNING)
     runtime = trt.Runtime(trt_logger)
 
     with engine_path.open("rb") as f:
         engine = runtime.deserialize_cuda_engine(f.read())
 
-    if not engine:
-        raise RuntimeError(f"Не удалось десериализовать TRT engine: {engine_path}")
+    if engine is None:
+        msg = f"Не удалось десериализовать TRT engine: {engine_path}"
+        raise RuntimeError(msg)
 
     inspector = engine.create_engine_inspector()
     # Выгружаем профиль графа в машиночитаемом формате
@@ -590,21 +656,44 @@ def analyze_engine_precision(engine_path: Path) -> dict[str, int | float]:
 
     stats: dict[str, int] = {"INT8": 0, "FP16": 0, "FP32": 0, "OTHER": 0, "UNKNOWN": 0}
 
+    # Map TRT Format/Datatype strings → stats bucket names.
+    datatype_to_precision: dict[str, str] = {
+        "Int8": "INT8",
+        "Half": "FP16",
+        "Float": "FP32",
+    }
+
     for layer in layers:
         if isinstance(layer, dict):
-            # Пытаемся получить явное поле Precision (если есть)
+            # Try the explicit Precision field first (if present).
             precision = layer.get("Precision", None)
             if not precision:
-                # Если явного нет, смотрим на тип данных первого выхода
+                # WR-08: classify by ALL output datatypes, not just outputs[0].
+                # A multi-output layer can have mixed-precision outputs (e.g.
+                # Conv with INT8 main + FP32 bias). The previous code reported
+                # only outputs[0], over-counting INT8 for such graphs.
+                # Strategy: collect every output's mapped precision; if they
+                # all agree, use that; if they differ, log and bucket as
+                # OTHER so the int8_ratio_percent diagnostic is conservative.
                 outputs = layer.get("Outputs", [])
                 if outputs and isinstance(outputs, list):
-                    datatype = outputs[0].get("Format/Datatype", "OTHER")
-                    if datatype == "Int8":
-                        precision = "INT8"
-                    elif datatype == "Half":
-                        precision = "FP16"
-                    elif datatype == "Float":
-                        precision = "FP32"
+                    output_precisions = {
+                        datatype_to_precision.get(
+                            out.get("Format/Datatype", "OTHER"),
+                            "OTHER",
+                        )
+                        for out in outputs
+                        if isinstance(out, dict)
+                    }
+                    if len(output_precisions) == 1:
+                        precision = next(iter(output_precisions))
+                    elif output_precisions:
+                        logger.warning(
+                            "Layer %s has mixed output datatypes %s — bucketing as OTHER",
+                            layer.get("Name", "<unnamed>"),
+                            sorted(output_precisions),
+                        )
+                        precision = "OTHER"
                     else:
                         precision = "OTHER"
                 else:

@@ -1,4 +1,7 @@
-"""Tests for RT-DETR ONNX export pipeline. Requires GPU + downloaded weights."""
+"""Tests for RT-DETR ONNX export pipeline. Requires GPU + downloaded weights.
+
+Note: YOLO ONNX export (export_yolo_to_onnx) is covered by tests/test_yolo_onnx_export.py.
+"""
 
 from __future__ import annotations
 

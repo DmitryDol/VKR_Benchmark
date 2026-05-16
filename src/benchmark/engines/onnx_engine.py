@@ -3,24 +3,65 @@
 from __future__ import annotations
 
 import logging
+import os
+import site
+import sys
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import numpy as np
 import onnxruntime as ort
 from PIL import Image
 
-from benchmark.data.coco_loader import COCO_80_TO_91
 from benchmark.engines.base import BaseEngine, Detection
 
 if TYPE_CHECKING:
-    from pathlib import Path
-
     from benchmark.data.coco_loader import COCOSample
+    from benchmark.engines.pytorch_engine import ModelAdapter
 
 # Minimum number of output tensors expected from RT-DETR ONNX model
 _MIN_ONNX_OUTPUTS: int = 2
 
 logger = logging.getLogger(__name__)
+
+_cuda_dll_dirs_registered = False
+
+
+def _register_cuda_dll_dirs() -> None:
+    """Add the pip-installed CUDA 12 runtime libs to the Windows DLL search path.
+
+    onnxruntime-gpu 1.26 is built against CUDA 12.x, but the project's torch
+    ships CUDA 13.x — so ORT's CUDA EP cannot use torch's bundled libs. The
+    CUDA 12 runtime/cuDNN come from the ``nvidia-*-cu12`` pip packages, which
+    land in ``site-packages/nvidia/*/bin``. ORT does not auto-discover them on
+    Windows, so register them here. Both ``os.add_dll_directory`` AND a PATH
+    prepend are required: ``cudnn64_9.dll`` is a thin loader that pulls its
+    sub-DLLs (``cudnn_graph64_9.dll`` etc.) via the legacy PATH search.
+    """
+    global _cuda_dll_dirs_registered  # noqa: PLW0603
+    if _cuda_dll_dirs_registered or sys.platform != "win32":
+        return
+
+    bin_dirs: list[str] = []
+    for site_dir in site.getsitepackages():
+        nvidia_root = Path(site_dir) / "nvidia"
+        if not nvidia_root.is_dir():
+            continue
+        bin_dirs.extend(str(p) for p in nvidia_root.glob("*/bin") if p.is_dir())
+
+    if not bin_dirs:
+        logger.warning(
+            "ONNX CUDA EP: no nvidia-*-cu12 package bin dirs found — "
+            "install them with `uv pip install nvidia-cuda-runtime-cu12 "
+            "nvidia-cudnn-cu12 nvidia-cublas-cu12 nvidia-cufft-cu12`"
+        )
+        return
+
+    for d in bin_dirs:
+        os.add_dll_directory(d)
+    os.environ["PATH"] = os.pathsep.join([*bin_dirs, os.environ.get("PATH", "")])
+    _cuda_dll_dirs_registered = True
+    logger.info("ONNX CUDA EP: registered %d CUDA 12 DLL dir(s)", len(bin_dirs))
 
 
 class OnnxRuntimeEngine(BaseEngine):
@@ -45,10 +86,12 @@ class OnnxRuntimeEngine(BaseEngine):
         self,
         model_name: str,
         onnx_path: Path,
+        adapter: ModelAdapter,
         input_size: tuple[int, int] = (640, 640),
-        score_threshold: float = 0.01,
+        score_threshold: float = 0.001,
     ) -> None:
         super().__init__(model_name, engine_type="onnx", precision="fp32")
+        self._adapter = adapter
         self._onnx_path = onnx_path
         self._input_size = input_size
         self._score_threshold = score_threshold
@@ -64,6 +107,7 @@ class OnnxRuntimeEngine(BaseEngine):
         T-02-06 mitigation: check available providers; fall back to CPU
         with a logged warning if CUDA EP is unavailable.
         """
+        _register_cuda_dll_dirs()
         available = ort.get_available_providers()
         if "CUDAExecutionProvider" in available:
             providers: list[str] = ["CUDAExecutionProvider", "CPUExecutionProvider"]
@@ -82,19 +126,35 @@ class OnnxRuntimeEngine(BaseEngine):
         self._session = ort.InferenceSession(
             str(self._onnx_path), sess_options=opts, providers=providers
         )
+        active = self._session.get_providers()
+        if "CUDAExecutionProvider" in providers and "CUDAExecutionProvider" not in active:
+            logger.warning(
+                "OnnxRuntimeEngine: CUDA EP requested but ORT fell back to %s — "
+                "stage 2 latency will reflect CPU inference",
+                active,
+            )
         logger.info(
-            "ONNX session loaded: %s (%.1f MB)",
+            "ONNX session loaded: %s (%.1f MB) — active provider: %s",
             self._onnx_path.name,
             self.model_size_mb,
+            active[0],
         )
 
     def preprocess(self, sample: COCOSample) -> np.ndarray:
-        """Resize image and convert to (1, 3, H, W) float32 numpy array.
+        """Resize image and convert to model input tensor using adapter.
 
-        Matches PyTorchEngine preprocessing: resize to input_size, scale
-        to [0, 1], no ImageNet normalization (RT-DETR convention).
+        If the adapter exposes a ``preprocess`` method (e.g. YOLO letterbox),
+        delegate to it and return the tensor as a CPU numpy array. Otherwise
+        fall back to the generic stretch-resize used by RT-DETR.
+
+        Returns (1, 3, H, W) float32 numpy array.
         """
-        h, w = self._input_size
+        adapter_pre = getattr(self._adapter, "preprocess", None)
+        if callable(adapter_pre):
+            tensor = adapter_pre(sample, device=None)
+            return tensor.cpu().numpy().astype(np.float32)
+
+        h, w = self._adapter.input_size
         img = Image.fromarray(sample.image).resize((w, h), Image.BILINEAR)
         arr = np.array(img, dtype=np.float32) / 255.0  # HWC, [0, 1]
         arr = arr.transpose(2, 0, 1)  # CHW
@@ -115,56 +175,20 @@ class OnnxRuntimeEngine(BaseEngine):
         return self._session.run(None, {input_name: inputs})
 
     def postprocess(self, raw_outputs: object, sample: COCOSample) -> Detection:
-        """Parse ONNX RT-DETR outputs to Detection.
+        """Delegate to adapter for model-specific output parsing.
 
-        RT-DETR ONNX model outputs two tensors:
-          - logits: (1, num_queries, num_classes)
-          - pred_boxes: (1, num_queries, 4) in [cx, cy, w, h] normalized
-
-        This matches the HuggingFace RT-DETR ONNX export convention from Phase 1.
+        Parameters
+        ----------
+        raw_outputs : object
+            List of numpy arrays from session.run().
+        sample : COCOSample
+            Original image metadata.
         """
-        if not isinstance(raw_outputs, list) or len(raw_outputs) < _MIN_ONNX_OUTPUTS:
-            msg = f"Unexpected ONNX output format: {type(raw_outputs)}"
-            raise RuntimeError(msg)
-
-        logits: np.ndarray = raw_outputs[0][0]  # (num_queries, num_classes)
-        pred_boxes: np.ndarray = raw_outputs[1][0]  # (num_queries, 4) cx cy w h norm
-
-        # Softmax scores + argmax labels
-        exp_logits = np.exp(logits - logits.max(axis=-1, keepdims=True))
-        probs = exp_logits / exp_logits.sum(axis=-1, keepdims=True)
-        scores = probs.max(axis=-1)  # (num_queries,)
-        labels = probs.argmax(axis=-1).astype(np.int64)  # (num_queries,)
-
-        # Filter by score threshold
-        keep = scores >= self._score_threshold
-        scores = scores[keep]
-        labels = labels[keep]
-        boxes_norm = pred_boxes[keep]  # (N, 4) cx cy w h normalized
-
-        # Convert cx cy w h -> x1 y1 x2 y2 in original pixel space
-        orig_h, orig_w = sample.original_size
-        cx, cy, w, h = (
-            boxes_norm[:, 0] * orig_w,
-            boxes_norm[:, 1] * orig_h,
-            boxes_norm[:, 2] * orig_w,
-            boxes_norm[:, 3] * orig_h,
-        )
-        x1 = cx - w / 2
-        y1 = cy - h / 2
-        x2 = cx + w / 2
-        y2 = cy + h / 2
-        boxes = np.stack([x1, y1, x2, y2], axis=1).astype(np.float32)
-
-        # Labels from ONNX are 0-indexed (80 classes) -> map to COCO 91-class IDs
-        coco_labels = np.array(
-            [COCO_80_TO_91.get(int(lbl), int(lbl)) for lbl in labels], dtype=np.int64
-        )
-
-        return Detection(
-            boxes=boxes.reshape(-1, 4),
-            scores=scores.astype(np.float32),
-            labels=coco_labels,
+        return self._adapter.parse_outputs(
+            raw_outputs,
+            original_size=sample.original_size,
+            input_size=self._adapter.input_size,
+            score_threshold=self._score_threshold,
         )
 
     @property

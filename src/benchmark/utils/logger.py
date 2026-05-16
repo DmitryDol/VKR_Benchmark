@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import json
 import logging
+import math
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -14,6 +15,35 @@ if TYPE_CHECKING:
     from benchmark.utils.hardware import HardwareInfo
 
 logger = logging.getLogger(__name__)
+
+
+def _fmt_metric(val: object, dec: int) -> str:
+    """Format a numeric metric for the summary table, handling NaN and non-numerics.
+
+    Used by :meth:`ResultLogger.merge_to_unified`. Lifted out of the per-row
+    loop (WR-04) so the helper is created once. Uses ``math.isnan`` for the
+    NaN check (WR-05) instead of the ``f != f`` self-comparison idiom.
+
+    Parameters
+    ----------
+    val : object
+        Raw cell value from the CSV row dict.
+    dec : int
+        Number of decimal places.
+
+    Returns
+    -------
+    str
+        Formatted numeric string, ``"NaN"`` for NaN, or ``str(val)`` for
+        anything that cannot be coerced to ``float``.
+    """
+    try:
+        x = float(val)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return str(val)
+    if math.isnan(x):
+        return "NaN"
+    return f"{x:.{dec}f}"
 
 
 @dataclass
@@ -164,8 +194,10 @@ class ResultLogger:
         """Compare the three INT8 stage results and write int8_best_calibrator.json.
 
         Reads ``{run_id}/{stage}.json`` for minmax, entropy, and percentile.
-        Picks the calibrator with the highest ``map_50_95`` (NaN / missing stages
-        are skipped).  Writes the result to::
+        Picks the calibrator with the highest ``map_50_95``, tie-broken by the
+        lower ``latency_total_ms`` (Phase 7 D-12). NaN / missing stages are
+        skipped; a missing/non-numeric latency falls back to ``+inf`` so it
+        can never win a tie. Writes the result to::
 
             results/{model_name}/{run_id}/int8_best_calibrator.json
 
@@ -204,19 +236,42 @@ class ResultLogger:
                 map_float = float(map_val)  # type: ignore[arg-type]
             except (TypeError, ValueError):
                 map_float = float("nan")
-            if map_float != map_float:  # NaN check
+            if math.isnan(map_float):
                 continue
-            candidates.append({"calibrator": method, "stage": stage_key, "map_50_95": map_float})
+            # D-12: capture latency for the tie-break. Missing/non-numeric/NaN
+            # latency falls back to +inf so it can never win a tie.
+            lat_val = data.get("latency_total_ms")
+            try:
+                lat_float = float(lat_val)  # type: ignore[arg-type]
+            except (TypeError, ValueError):
+                lat_float = float("inf")
+            if math.isnan(lat_float):
+                lat_float = float("inf")
+            candidates.append(
+                {
+                    "calibrator": method,
+                    "stage": stage_key,
+                    "map_50_95": map_float,
+                    "latency_total_ms": lat_float,
+                }
+            )
 
         if not candidates:
             logger.warning("No valid INT8 results found — int8_best_calibrator.json not written")
             return None
 
-        best = max(candidates, key=lambda x: float(x["map_50_95"]))
+        # D-12: rank by mAP descending, tie-break by latency ascending.
+        # `min` with the negated mAP picks the highest-mAP candidate first;
+        # on an exact mAP tie the lower latency wins.
+        best = min(
+            candidates,
+            key=lambda x: (-float(x["map_50_95"]), float(x["latency_total_ms"])),
+        )
         out: dict[str, object] = {
             "best_calibrator": best["calibrator"],
             "best_stage": best["stage"],
             "map_50_95": best["map_50_95"],
+            "latency_total_ms": best["latency_total_ms"],
             "all_candidates": candidates,
         }
 
@@ -235,8 +290,17 @@ class ResultLogger:
 
         Reads: results/{model_name}/{run_id}/*.csv (sorted by filename = stage order)
         Writes:
-            results/results.csv   (overwrites with merged content)
-            results/results.json  (overwrites with merged content)
+            results/results.csv                              (aggregated across models)
+            results/results.json                             (aggregated across models)
+            results/{model_name}/{run_id}/summary.txt        (per-model human-readable)
+            results/{model_name}/{run_id}/summary.md         (per-model human-readable)
+
+        The global ``results.csv`` / ``results.json`` files keep rows for every
+        previously merged ``(model_name, stage)`` pair; only the rows whose
+        ``model_name`` column matches the current call are replaced with the
+        freshly merged content. This lets the user call ``benchmark merge`` once
+        per model with the same ``--run-id`` without losing earlier models'
+        rows.
 
         Parameters
         ----------
@@ -272,64 +336,83 @@ class ResultLogger:
         unified_csv = self.output_dir / "results.csv"
         unified_json = self.output_dir / "results.json"
 
-        # Write unified CSV (overwrite)
-        if all_rows:
-            with unified_csv.open("w", newline="", encoding="utf-8") as f:
-                writer = csv.DictWriter(f, fieldnames=all_rows[0].keys())
-                writer.writeheader()
-                writer.writerows(all_rows)
+        # Read existing aggregated rows for OTHER models so we do not clobber
+        # them when merging this model. Rows whose ``model_name`` matches the
+        # current call are dropped — they will be re-added from the freshly
+        # read per-stage CSVs below.
+        existing_other: list[dict[str, object]] = []
+        if unified_csv.exists():
+            with unified_csv.open(newline="", encoding="utf-8") as f:
+                reader = csv.DictReader(f)
+                existing_other = [
+                    r for r in reader if r.get("model_name") != model_name
+                ]
 
-        # Write unified JSON (overwrite)
+        merged_rows: list[dict[str, object]] = [*existing_other, *all_rows]
+
+        # Union of fieldnames preserves current-call schema first, then any
+        # extra keys carried by older rows (schema drift defensive).
+        fieldnames: list[str] = []
+        seen: set[str] = set()
+        for row in merged_rows:
+            for key in row.keys():
+                if key not in seen:
+                    fieldnames.append(key)
+                    seen.add(key)
+
+        if merged_rows:
+            with unified_csv.open("w", newline="", encoding="utf-8") as f:
+                writer = csv.DictWriter(f, fieldnames=fieldnames)
+                writer.writeheader()
+                writer.writerows(merged_rows)
+
         unified_json.write_text(
-            json.dumps(all_rows, indent=2, ensure_ascii=False), encoding="utf-8"
+            json.dumps(merged_rows, indent=2, ensure_ascii=False), encoding="utf-8"
         )
-        
+
         # Extract best stage
         best_stage = ""
         cal_file = model_dir / "int8_best_calibrator.json"
         if cal_file.exists():
             try:
                 best_stage = json.loads(cal_file.read_text(encoding="utf-8")).get("best_stage", "")
-            except Exception:
-                pass
-                
-        # Format text and markdown summaries
-        txt_path = self.output_dir / "summary.txt"
-        md_path = self.output_dir / "summary.md"
-        
+            except (json.JSONDecodeError, OSError) as exc:
+                logger.warning(
+                    "Could not parse %s: %s — summary will omit winner mark",
+                    cal_file,
+                    exc,
+                )
+
+        # Per-model human-readable summary lands under the model's run dir so
+        # repeated merge calls for sibling models do not overwrite each other.
+        txt_path = model_dir / "summary.txt"
+        md_path = model_dir / "summary.md"
+
         headers = ["Stage", "mAP@50:95", "Latency (ms)", "FPS", "Drop %", "Size (MB)"]
         rows = []
         for r in all_rows:
             st = str(r.get("stage", ""))
             if st == best_stage and best_stage:
                 st += " ★"
-            
-            def fmt(val: object, dec: int) -> str:
-                try:
-                    f = float(val)  # type: ignore[arg-type]
-                    if f != f: return "NaN"
-                    return f"{f:.{dec}f}"
-                except (ValueError, TypeError):
-                    return str(val)
-                    
+
             rows.append([
                 st,
-                fmt(r.get("map_50_95"), 3),
-                fmt(r.get("latency_total_ms"), 1),
-                fmt(r.get("throughput_fps"), 1),
-                fmt(r.get("accuracy_drop_pct"), 1),
-                fmt(r.get("model_size_mb"), 1)
+                _fmt_metric(r.get("map_50_95"), 3),
+                _fmt_metric(r.get("latency_total_ms"), 1),
+                _fmt_metric(r.get("throughput_fps"), 1),
+                _fmt_metric(r.get("accuracy_drop_pct"), 1),
+                _fmt_metric(r.get("model_size_mb"), 1),
             ])
-            
+
         # Write summary.txt
-        col_widths = [max(len(str(item)) for item in col) for col in zip(headers, *rows)]
+        col_widths = [max(len(str(item)) for item in col) for col in zip(headers, *rows, strict=False)]
         txt_lines = []
-        txt_lines.append(" | ".join(h.ljust(w) for h, w in zip(headers, col_widths)))
+        txt_lines.append(" | ".join(h.ljust(w) for h, w in zip(headers, col_widths, strict=False)))
         txt_lines.append("-+-".join("-" * w for w in col_widths))
         for row in rows:
-            txt_lines.append(" | ".join(str(item).ljust(w) for item, w in zip(row, col_widths)))
+            txt_lines.append(" | ".join(str(item).ljust(w) for item, w in zip(row, col_widths, strict=False)))
         txt_path.write_text("\n".join(txt_lines) + "\n", encoding="utf-8")
-        
+
         # Write summary.md
         md_lines = []
         md_lines.append("| " + " | ".join(headers) + " |")

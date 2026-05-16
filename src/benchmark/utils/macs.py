@@ -65,7 +65,7 @@ def compute_macs(
     """
     normalized = model_name.lower()
 
-    if normalized in _YOLO_FAMILY:
+    if any(normalized.startswith(y) for y in _YOLO_FAMILY):
         return _compute_macs_yolo(model, model_name)
     if normalized in _DETR_FAMILY:
         return _compute_macs_calflops(model, model_name, input_shape)

@@ -7,6 +7,7 @@ optimization for subsequent TensorRT conversion.
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import onnx
@@ -14,8 +15,6 @@ import onnxsim
 import torch
 
 if TYPE_CHECKING:
-    from pathlib import Path
-
     from torch import nn
 
 logger = logging.getLogger(__name__)
@@ -192,3 +191,69 @@ def export_and_simplify(
     )
 
     return simplify_onnx(raw_path, output_path=raw_path)
+
+
+def export_yolo_to_onnx(
+    weights_path: Path,
+    output_path: Path,
+    opset_version: int = 17,
+) -> Path:
+    """Export a YOLO model to simplified ONNX using the ultralytics exporter.
+
+    Uses the ultralytics ``YOLO.export()`` method (which handles YOLO-specific
+    graph quirks reliably) with ``simplify=False``, then runs the project's own
+    ``simplify_onnx()`` step for consistent graph optimization across all models
+    (D-01).  Batch size is fixed at 1 (``dynamic=False``); opset 17 is used per
+    D-02.
+
+    Parameters
+    ----------
+    weights_path : Path
+        Path to the ``.pt`` YOLO weights file.
+    output_path : Path
+        Destination path for the simplified ``_sim.onnx`` file.
+    opset_version : int
+        ONNX opset version (default 17, per D-02).
+
+    Returns
+    -------
+    Path
+        Path to the simplified ONNX file (equals ``output_path``).
+
+    Raises
+    ------
+    RuntimeError
+        If the ultralytics export step fails or produces no output file.
+    """
+    from ultralytics import YOLO  # noqa: PLC0415
+
+    logger.info("Exporting YOLO model to ONNX: %s (opset=%d)", weights_path, opset_version)
+
+    yolo = YOLO(str(weights_path))
+
+    # ultralytics .export() returns the path to the raw ONNX file as a string.
+    # simplify=False — the project runs its own onnxsim step below (D-01).
+    # dynamic=False — batch=1 fixed; no dynamic axes needed for TRT (D-02).
+    raw_onnx_str: str | None = yolo.export(
+        format="onnx",
+        simplify=False,
+        opset=opset_version,
+        dynamic=False,
+    )
+
+    if not raw_onnx_str:
+        msg = f"ultralytics YOLO.export() returned no output path for {weights_path}"
+        raise RuntimeError(msg)
+
+    raw_onnx_path = Path(raw_onnx_str)
+    logger.info("ultralytics ONNX export complete: %s", raw_onnx_path)
+
+    # Project onnxsim step — consistent graph optimization for all models (D-01).
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    sim_path = simplify_onnx(raw_onnx_path, output_path=output_path)
+
+    # T-07-02: validate the final simplified graph before handing to downstream stages.
+    validate_onnx(sim_path)
+
+    logger.info("YOLO simplified ONNX ready: %s", sim_path)
+    return sim_path

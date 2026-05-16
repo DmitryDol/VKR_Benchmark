@@ -4,10 +4,10 @@ from benchmark.engines.int8_calibrators import (
     MinMaxCalibrator,
     PercentileCalibrator,
 )
+from benchmark.engines.mixed_precision import apply_strategy_a, apply_strategy_b
 from benchmark.engines.onnx_engine import OnnxRuntimeEngine
 from benchmark.engines.pytorch_engine import PyTorchEngine
 from benchmark.engines.tensorrt_engine import TensorRTEngine
-from benchmark.engines.mixed_precision import apply_strategy_a, apply_strategy_b
 
 __all__ = [
     "BaseEngine",

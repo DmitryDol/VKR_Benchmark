@@ -157,3 +157,104 @@ def test_json_stage_file_has_correct_stage_value(tmp_path: Path) -> None:
     _, json_path = log.save_stage_files(result)
     data = json.loads(json_path.read_text())
     assert data["stage"] == "2_onnx_fp32"
+
+
+def _write_int8_stage_json(
+    stage_dir: Path, stage_key: str, map_50_95: float, latency_total_ms: float
+) -> None:
+    """Write a minimal per-stage INT8 JSON consumable by save_int8_best_calibrator."""
+    stage_dir.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "stage": stage_key,
+        "map_50_95": map_50_95,
+        "latency_total_ms": latency_total_ms,
+    }
+    (stage_dir / f"{stage_key}.json").write_text(json.dumps(payload), encoding="utf-8")
+
+
+def test_save_int8_best_calibrator_tie_breaks_by_latency(tmp_path: Path) -> None:
+    """D-12: when two calibrators share the highest mAP, the lower
+    latency_total_ms wins.
+    """
+    log = ResultLogger(output_dir=tmp_path, run_id="t")
+    stage_dir = tmp_path / "test-model" / "t"
+
+    # minmax + entropy tie on mAP; entropy has lower latency, so entropy wins.
+    # percentile has strictly lower mAP — must lose regardless of its latency.
+    _write_int8_stage_json(stage_dir, "5_trt_int8_minmax", map_50_95=0.42, latency_total_ms=20.0)
+    _write_int8_stage_json(stage_dir, "5_trt_int8_entropy", map_50_95=0.42, latency_total_ms=15.0)
+    _write_int8_stage_json(
+        stage_dir, "5_trt_int8_percentile", map_50_95=0.40, latency_total_ms=5.0
+    )
+
+    out_path = log.save_int8_best_calibrator("test-model")
+    assert out_path is not None
+    data = json.loads(out_path.read_text())
+
+    assert data["best_calibrator"] == "entropy", (
+        "D-12: lower latency must win on an exact mAP tie"
+    )
+    assert data["best_stage"] == "5_trt_int8_entropy"
+    # Verify all_candidates carries latency_total_ms for downstream auditability.
+    assert all("latency_total_ms" in c for c in data["all_candidates"])
+
+
+def test_save_int8_best_calibrator_picks_highest_map(tmp_path: Path) -> None:
+    """A strictly higher mAP wins regardless of latency — the tie-break MUST
+    NOT override a real mAP difference.
+    """
+    log = ResultLogger(output_dir=tmp_path, run_id="t2")
+    stage_dir = tmp_path / "test-model" / "t2"
+
+    # entropy has highest mAP but slowest latency — must still win.
+    _write_int8_stage_json(stage_dir, "5_trt_int8_minmax", map_50_95=0.40, latency_total_ms=5.0)
+    _write_int8_stage_json(stage_dir, "5_trt_int8_entropy", map_50_95=0.45, latency_total_ms=30.0)
+    _write_int8_stage_json(
+        stage_dir, "5_trt_int8_percentile", map_50_95=0.42, latency_total_ms=10.0
+    )
+
+    out_path = log.save_int8_best_calibrator("test-model")
+    assert out_path is not None
+    data = json.loads(out_path.read_text())
+
+    assert data["best_calibrator"] == "entropy"
+    assert data["best_stage"] == "5_trt_int8_entropy"
+    assert float(data["map_50_95"]) == pytest.approx(0.45)
+
+
+def test_save_int8_best_calibrator_missing_latency_falls_back_to_inf(tmp_path: Path) -> None:
+    """A candidate with missing/non-numeric latency_total_ms cannot win a tie
+    (latency falls back to +inf). With an exact mAP tie, the candidate that
+    HAS a finite latency must win.
+    """
+    log = ResultLogger(output_dir=tmp_path, run_id="t3")
+    stage_dir = tmp_path / "test-model" / "t3"
+
+    # minmax — tied on mAP, missing latency_total_ms (will fall back to +inf).
+    bad_payload = {"stage": "5_trt_int8_minmax", "map_50_95": 0.42}
+    stage_dir.mkdir(parents=True, exist_ok=True)
+    (stage_dir / "5_trt_int8_minmax.json").write_text(json.dumps(bad_payload), encoding="utf-8")
+
+    _write_int8_stage_json(stage_dir, "5_trt_int8_entropy", map_50_95=0.42, latency_total_ms=20.0)
+    _write_int8_stage_json(
+        stage_dir, "5_trt_int8_percentile", map_50_95=0.40, latency_total_ms=5.0
+    )
+
+    out_path = log.save_int8_best_calibrator("test-model")
+    assert out_path is not None
+    data = json.loads(out_path.read_text())
+
+    assert data["best_calibrator"] == "entropy", (
+        "Missing latency must fall back to +inf and cannot win a tie"
+    )
+
+
+def test_save_int8_best_calibrator_returns_none_when_no_results(tmp_path: Path) -> None:
+    """Regression guard: when no INT8 stage JSONs exist, the function logs a
+    warning and returns ``None`` — does not crash and does not write a file.
+    """
+    log = ResultLogger(output_dir=tmp_path, run_id="empty")
+    # Don't write any per-stage JSON files.
+    out_path = log.save_int8_best_calibrator("test-model")
+    assert out_path is None
+    assert not (tmp_path / "test-model" / "empty" / "int8_best_calibrator.json").exists()
