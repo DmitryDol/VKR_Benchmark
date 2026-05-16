@@ -21,6 +21,18 @@ Requirements for initial release. Each maps to roadmap phases.
 - [x] **OPT-YOLO-04**: Apply Mixed Precision quantization (Strategy A & B) to the YOLO family using the best per-model calibrator and record Stage 6 metrics
 - [x] **OPT-YOLO-05**: Log full per-stage metrics for every YOLO optimization stage to the unified results.csv/results.json with model_name and stage columns
 
+### Transformer (DETR-family) Optimization Pipeline
+- [ ] **OPT-TR-01**: Export RF-DETR / D-FINE / DEIMv2 to simplified ONNX (project's torch.onnx.export + onnxsim, opset 17) and record Stage 2 metrics
+- [ ] **OPT-TR-02**: Build TensorRT standard-precision engines (TF32, FP16, BF16) for each transformer detector under the 2 GB workspace limit and record Stage 3-4 metrics
+- [ ] **OPT-TR-03**: Run INT8 calibration (MinMax, Entropy, Percentile) for each transformer detector on the project-standard fixed 500-image COCO set and record Stage 5 metrics
+- [ ] **OPT-TR-04**: Apply Mixed Precision quantization (Strategy A & B) to each transformer detector using the best per-model calibrator and record Stage 6 metrics
+- [ ] **OPT-TR-05**: Each transformer detector's best config lands within 2.0% mAP_50:95 of its FP32 baseline (D-14/D-15 hard verification gate, mirrors Phase 7)
+
+### Diploma Data Export (Mid-Project)
+- [ ] **DIP-01**: Produce `results-midproject.csv` aggregating every (model × stage × precision) metric cell for RT-DETR + YOLO11l + YOLO26l + RF-DETR
+- [ ] **DIP-02**: Produce `summary-midproject.md` with publication-ready comparison tables (Latency, FPS, mAP_50, mAP_50:95, VRAM, model size) for the diploma's practical chapter
+- [ ] **DIP-03**: Save per-model comparison charts (or data + render script) under `results/diploma/` so figures are reproducible
+
 ### Batch Orchestration CLI
 - [ ] **CLI-04**: Implement `run-all` Typer command to sequentially execute all models across all stages
 - [ ] **CLI-05**: Enforce explicit CUDA cache clearing (`torch.cuda.empty_cache()`) and garbage collection between batch runs to prevent VRAM leaks
@@ -62,20 +74,28 @@ Which phases cover which requirements. Updated during roadmap creation.
 | OPT-YOLO-03 | Phase 7 | Pending |
 | OPT-YOLO-04 | Phase 7 | Complete |
 | OPT-YOLO-05 | Phase 7 | Complete |
-| ADPT-05 | Phase 8 | Pending |
-| ADPT-06 | Phase 8 | Pending |
 | ADPT-07 | Phase 8 | Pending |
-| CLI-04 | Phase 9 | Pending |
-| CLI-05 | Phase 9 | Pending |
-| CLI-06 | Phase 9 | Pending |
-| LOG-13 | Phase 10 | Pending |
-| LOG-14 | Phase 10 | Pending |
+| OPT-TR-01 | Phase 8 (RF-DETR) + Phase 10 (D-FINE/DEIMv2) | Pending |
+| OPT-TR-02 | Phase 8 (RF-DETR) + Phase 10 (D-FINE/DEIMv2) | Pending |
+| OPT-TR-03 | Phase 8 (RF-DETR) + Phase 10 (D-FINE/DEIMv2) | Pending |
+| OPT-TR-04 | Phase 8 (RF-DETR) + Phase 10 (D-FINE/DEIMv2) | Pending |
+| OPT-TR-05 | Phase 8 (RF-DETR) + Phase 10 (D-FINE/DEIMv2) | Pending |
+| DIP-01 | Phase 9 | Pending |
+| DIP-02 | Phase 9 | Pending |
+| DIP-03 | Phase 9 | Pending |
+| ADPT-05 | Phase 10 | Pending |
+| ADPT-06 | Phase 10 | Pending |
+| CLI-04 | Phase 11 | Pending |
+| CLI-05 | Phase 11 | Pending |
+| CLI-06 | Phase 11 | Pending |
+| LOG-13 | Phase 12 | Pending |
+| LOG-14 | Phase 12 | Pending |
 
 **Coverage:**
-- v2.0 requirements: 15 total
-- Mapped to phases: 15
+- v2.0 requirements: 23 total
+- Mapped to phases: 23
 - Unmapped: 0
 
 ---
 *Requirements defined: 2026-05-12*
-*Last updated: 2026-05-14 — added OPT-YOLO-01..05 (Phase 7); synced Traceability table with the v2.0 phase layout*
+*Last updated: 2026-05-16 — split Phase 8 into Phase 8 (RF-DETR only), Phase 9 (mid-project diploma data export), Phase 10 (D-FINE + DEIMv2); added OPT-TR-01..05 and DIP-01..03; shifted CLI/LOG mappings to Phases 11/12.*
