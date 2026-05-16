@@ -86,6 +86,11 @@ MODEL_REGISTRY: dict[str, dict[str, str]] = {
         "onnx": "weights/yolo26l/yolo26l_sim.onnx",
         "family": "yolo",
     },
+    "rfdetr-l": {
+        "weights": "weights/rfdetr-l/",
+        "onnx": "weights/rfdetr-l/rfdetr_l_sim.onnx",
+        "family": "rfdetr",
+    },
 }
 
 
@@ -121,6 +126,11 @@ def _get_adapter(model_name: str) -> object:
         is_nms_free = model_name == "yolo26l"
         return YOLOAdapter(is_nms_free=is_nms_free)
 
+    if model_name == "rfdetr-l":
+        from benchmark.models.rfdetr_adapter import RFDETRAdapter  # noqa: PLC0415
+
+        return RFDETRAdapter()
+
     msg = f"Unknown model '{model_name}'. Available: {list(MODEL_REGISTRY)}"
     raise typer.BadParameter(msg)
 
@@ -145,12 +155,14 @@ def _run_stage(  # noqa: PLR0912, PLR0915
         weights_path = Path(MODEL_REGISTRY[model_name]["weights"])
         engine.load_model(weights_path)
 
-        # D-09: compute MACs once at stage 1
+        # D-09: compute MACs once at stage 1 — read input shape from adapter so
+        # non-640 models (e.g. RF-DETR @ 704x704) produce correct FLOPs.
         if macs is None:
+            h, w = adapter.input_size  # type: ignore[union-attr]
             macs, flops = compute_macs(
                 engine.model,
                 model_name,
-                input_shape=(1, 3, 640, 640),
+                input_shape=(1, 3, h, w),
             )
 
         result = engine.run_full_benchmark(
