@@ -11,6 +11,9 @@ from benchmark.engines.mixed_precision import (
 EXPECTED_BOUNDARY_LAYERS = 2
 EXPECTED_SOFTMAX_LAYERS_ON_YOLO = 2
 EXPECTED_STRATEGY_B_HITS_MIXED = 2
+EXPECTED_RFDETR_STRATEGY_B_MIN = 71  # 51 LayerNormalization + 20 Softmax per Plan 08-02
+EXPECTED_RFDETR_LAYERNORM_COUNT = 51
+EXPECTED_RFDETR_SOFTMAX_COUNT = 20
 
 
 class MockLayerType:
@@ -18,6 +21,8 @@ class MockLayerType:
     SHAPE = 2
     SOFTMAX = 3
     CONVOLUTION = 4
+    NORMALIZATION = 5  # D-RF-03 B2 — INormalizationLayer (TRT 8.6+ native LayerNorm)
+    ELEMENTWISE = 6
 
 trt_mock = MagicMock()
 trt_mock.LayerType = MockLayerType
@@ -225,3 +230,104 @@ def test_strategy_a_selects_first_and_last_layers_yolo_shape():
     assert const_layer.set_output_type.call_count == 0
     assert shape_layer.set_output_type.call_count == 0
     assert mid_conv.set_output_type.call_count == 0
+
+
+# ---------------------------------------------------------------------------
+# Phase 8 Plan 04 — D-RF-03 B2 contract pins for the RF-DETR / transformer family.
+#
+# These tests document the Strategy B behaviour on a transformer-shaped network
+# (RF-DETR-L: 51 single-node LayerNormalization + 20 Softmax per Plan 08-02
+# checkpoint). Per D-RF-03 = B2 the predicate now has THREE clauses:
+#   1. layer.type == SOFTMAX
+#   2. layer.type == NORMALIZATION  <-- NEW (catches INormalizationLayer name-agnostically)
+#   3. "norm" in layer.name.lower()
+# Without the new (2) clause, a future vendor whose LayerNorm nodes don't carry
+# 'norm' in the name (e.g. "Block_3_Stabilize") would silently miss FP16 marking.
+# ---------------------------------------------------------------------------
+
+
+def test_strategy_b_fires_on_normalization_type_even_when_name_lacks_norm():
+    """D-RF-03 B2: NORMALIZATION-type layer marked FP16 even when name has no 'norm'.
+
+    KEY TEST: proves the B2 patch catches LayerNorm layers via type, independent
+    of naming. Without the B2 patch (i.e. with only SOFTMAX + 'norm'-substring),
+    this layer would silently miss FP16 marking.
+    """
+    network = MagicMock()
+    network.num_layers = 2
+
+    # NORMALIZATION layer whose NAME does NOT contain 'norm' — the contract
+    # the B2 patch hardens against.
+    layer_norm = _make_yolo_layer(MockLayerType.NORMALIZATION, "Block_3_Stabilize")
+    layer_conv = _make_yolo_layer(MockLayerType.CONVOLUTION, "head_conv")
+
+    network.get_layer.side_effect = [layer_norm, layer_conv]
+
+    count = apply_strategy_b(network)
+
+    assert count == 1
+    layer_norm.set_output_type.assert_called_with(0, "float16")
+    assert layer_conv.set_output_type.call_count == 0
+
+
+def test_strategy_b_still_fires_on_norm_substring_when_type_is_not_normalization():
+    """B2 is additive: substring fallback still active for opset<17 decomposed-LayerNorm graphs."""
+    network = MagicMock()
+    network.num_layers = 1
+
+    # ELEMENTWISE op (not SOFTMAX, not NORMALIZATION) but the name contains 'norm'
+    # — e.g. a partial fragment of a decomposed LayerNorm subgraph at opset < 17.
+    layer = _make_yolo_layer(MockLayerType.ELEMENTWISE, "decoder/norm/Mul")
+    network.get_layer.side_effect = [layer]
+
+    count = apply_strategy_b(network)
+
+    assert count == 1
+    layer.set_output_type.assert_called_with(0, "float16")
+
+
+def test_strategy_b_still_fires_on_softmax_type_with_unrelated_name():
+    """Existing SOFTMAX behaviour preserved: type clause fires even when name lacks 'norm'."""
+    network = MagicMock()
+    network.num_layers = 1
+
+    layer = _make_yolo_layer(MockLayerType.SOFTMAX, "decoder/attention/Softmax_3")
+    network.get_layer.side_effect = [layer]
+
+    count = apply_strategy_b(network)
+
+    assert count == 1
+    layer.set_output_type.assert_called_with(0, "float16")
+
+
+def test_strategy_b_marks_at_least_71_on_rfdetr_like_mock_network():
+    """D-RF-03 acceptance gate: >=71 layers on an RF-DETR-shaped graph (51 LN + 20 SM)."""
+    network = MagicMock()
+    layers: list[MagicMock] = []
+
+    # Build 51 NORMALIZATION layers with names that do NOT contain 'norm'.
+    # Forces the test to exercise the NEW type-based clause specifically;
+    # if the patch were missing, the count would drop to 20 (Softmax only).
+    for i in range(EXPECTED_RFDETR_LAYERNORM_COUNT):
+        layers.append(_make_yolo_layer(MockLayerType.NORMALIZATION, f"Stabilize_{i}"))
+    # Plus 20 SOFTMAX layers.
+    for i in range(EXPECTED_RFDETR_SOFTMAX_COUNT):
+        layers.append(_make_yolo_layer(MockLayerType.SOFTMAX, f"attn_softmax_{i}"))
+    # Plus some convolutions / constants that must NOT be marked.
+    for i in range(10):
+        layers.append(_make_yolo_layer(MockLayerType.CONVOLUTION, f"conv_{i}"))
+    layers.append(_make_yolo_layer(MockLayerType.CONSTANT, "const_anchor"))
+
+    network.num_layers = len(layers)
+    network.get_layer.side_effect = layers
+
+    count = apply_strategy_b(network)
+
+    # The acceptance gate from RESEARCH § D-RF-03.
+    assert count >= EXPECTED_RFDETR_STRATEGY_B_MIN, (
+        f"D-RF-03 acceptance gate violated: expected >= {EXPECTED_RFDETR_STRATEGY_B_MIN} "
+        f"FP16 marks, got {count}. Either the B2 patch isn't firing or the ONNX "
+        f"contract (51 LayerNormalization + 20 Softmax) broke."
+    )
+    # Exact for the constructed mock graph: 51 + 20 = 71.
+    assert count == EXPECTED_RFDETR_LAYERNORM_COUNT + EXPECTED_RFDETR_SOFTMAX_COUNT

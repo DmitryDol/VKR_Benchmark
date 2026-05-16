@@ -97,7 +97,7 @@ ignore = [
 "tests/**/*.py" = ["S101", "ANN"]
 
 [tool.pytest.ini_options]
-pythonpath = ["src"]
+pythonpath = ["src", "."]
 
 [tool.ruff.format]
 quote-style = "double"
