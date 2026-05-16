@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 
 from benchmark.data.coco_loader import COCOAnnotation, COCOSample
-from benchmark.engines.base import Detection
+from benchmark.engines.base import Detection  # direct import to avoid tensorrt at conftest load
 
 
 @pytest.fixture
