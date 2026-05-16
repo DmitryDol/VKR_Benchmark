@@ -1,5 +1,5 @@
 ---
-status: partial
+status: complete
 phase: 07-yolo-family-quantization-stages-2-6
 source: [07-01-SUMMARY.md, 07-02-SUMMARY.md, 07-03-SUMMARY.md, 07-04-SUMMARY.md]
 started: 2026-05-16T00:00:00Z
@@ -8,7 +8,7 @@ updated: 2026-05-16T00:00:00Z
 
 ## Current Test
 
-[testing paused — blocker fix applied, user re-running TRT benchmarks before resuming UAT from test 4]
+[testing complete]
 
 ## Tests
 
@@ -26,67 +26,64 @@ result: pass
 note: User confirmed YOLO engines present; user separately deleted rtdetr_*.engine files outside UAT scope — the file-untouched guarantee was bypassed by user action, not by Phase 7 code.
 
 ### 4. BF16 ran natively on RTX 3070 (Ampere gate passed)
-expected: In `results/results.csv` the `4_trt_bf16` rows for both yolo11l and yolo26l have non-zero `map_50` / `map_50_95` and an empty `skipped_reason` — BF16 built and ran on RTX 3070 without falling back.
-result: issue
-reported: "для yolo метрики упали, для pytorch и onnx метрики нормальные, а на tensorrt резко падают. у нас видимо проблемы с tensorrt engine"
-severity: blocker
-note: Subsumed by Test 14 — TensorRT engine regression also affects YOLO (not just RT-DETR). Stage 3-6 TRT rows for both YOLO models are likely invalid until the TRT preprocess/infer/postprocess parity bug is fixed.
+expected: In `results/results.csv` the `4_trt_bf16` rows for both yolo11l and yolo26l have non-zero `map_50` / `map_50_95` and an empty `skipped_reason` — BF16 built and ran on RTX 3070 without falling back. After WR-11/WR-12 fixes, mAP must also align with PyTorch/ONNX baseline within ~1-2%.
+result: pass
+prior_result: issue (blocker — TRT dtype + stream race regression, fixed via WR-11/WR-12, rebenchmark confirmed parity)
 
 ### 5. Stage 5 INT8 engines + calibration caches on disk
 expected: All 6 INT8 engines + 6 caches present under `engines/`: `yolo{11l,26l}_int8_{minmax,entropy,percentile}.{engine,cache}`. Pre-existing `rtdetr_int8_*` files untouched.
-result: [pending]
+result: pass
 
 ### 6. Stage 5 INT8 mAP numbers in results.csv
 expected: `results/results.csv` has rows for `5_trt_int8_{minmax,entropy,percentile}` × {yolo11l, yolo26l} (6 rows) with non-zero `map_50` / `map_50_95` and empty `skipped_reason`. yolo11l percentile ≈ 0.514, yolo26l minmax ≈ 0.515. Entropy rows are present even though mAP is much lower (architecture finding, not a bug).
-result: [pending]
+result: pass
 
 ### 7. Per-model best-calibrator JSON written with D-12 tie-break
 expected: `results/yolo11l/yolo_quant/int8_best_calibrator.json` exists with `best_calibrator: percentile`, `best_stage: 5_trt_int8_percentile`, and an `all_candidates` list of 3 entries each carrying a `latency_total_ms`. `results/yolo26l/yolo_quant/int8_best_calibrator.json` exists with `best_calibrator: minmax`, `best_stage: 5_trt_int8_minmax`, and the same `all_candidates` shape.
-result: [pending]
+result: pass
 
 ### 8. Stage 6 Mixed-Precision engines on disk
 expected: All 4 mixed-precision engines present under `engines/`: `yolo11l_mixed_a_percentile.engine`, `yolo11l_mixed_b_percentile.engine`, `yolo26l_mixed_a_minmax.engine`, `yolo26l_mixed_b_minmax.engine` — names match the per-model best Stage 5 base calibrator from test 7.
-result: [pending]
+result: pass
 
 ### 9. Stage 6 rows in results.csv with non-zero mAP
 expected: `results/results.csv` has rows for `6_trt_mixed_a` and `6_trt_mixed_b` × {yolo11l, yolo26l} (4 rows total) with non-zero `map_50` / `map_50_95` and empty `skipped_reason`. yolo11l mixed_a ≈ 0.5142 (best for yolo11l). yolo26l mixed_b ≈ 0.5142 (better of the two mixed runs but plain INT8 minmax 0.5150 still wins).
-result: [pending]
+result: pass
 
 ### 10. D-14 verdict matches Plan 04 summary
 expected: yolo11l best config is `6_trt_mixed_a` at mAP_50_95 ≈ 0.5142, drop ≈ 1.95% — PASSES the 2.0% gate. yolo26l best config is `5_trt_int8_minmax` at mAP_50_95 ≈ 0.5150, drop ≈ 4.69% — MISSES by 2.69 pp, user-accepted under D-15 (Strategy C explicitly NOT auto-triggered, deferred to v2 ADV-01).
-result: [pending]
+result: pass
 
 ### 11. Unified Stage 1-6 results merged for both YOLO models
 expected: `uv run benchmark merge --model yolo11l --run-id yolo_quant` and `uv run benchmark merge --model yolo26l --run-id yolo_quant` produced a unified summary (CSV+JSON+summary.md+summary.txt) covering Stages 1 through 6 (10 stages × 2 models = 20 YOLO rows present in `results/results.csv`). Pre-existing RT-DETR rows preserved.
-result: [pending]
+result: pass
 
 ### 12. Engine name collision avoided (model-name-keyed paths)
 expected: `engines/` contains zero files literally named `rtdetr_yolo*` or `yolo*_rtdetr*`. YOLO and RT-DETR engines coexist cleanly: RT-DETR keeps its original prefix, YOLO uses `yolo11l_*` / `yolo26l_*`. Grep `rtdetr_` in `src/benchmark/engines/tensorrt_engine.py` returns no hardcoded prefix.
-result: [pending]
+result: pass
 
 ### 13. Full unit-test suite passes
 expected: `uv run pytest tests/` exits 0 with all tests green, including the new YOLO ONNX export, TRT build-contract, INT8 calibrator-adapter, D-12 tie-break, and Strategy A/B contract tests added across Plans 01-04.
-result: [pending]
+result: pass
+note: User reported 68 passed, 9 warnings in 29.87s.
 
 ### 14. TensorRT engine ↔ PyTorch/ONNX parity (cross-model regression)
 expected: TensorRT preprocess / infer / postprocess produce mAP within ~1-2% of the PyTorch and ONNX Runtime engines on the same model + image set, for ALL models (RT-DETR, YOLO11l, YOLO26l). Phase 7's adapter-delegation / score_threshold changes MUST NOT introduce a TRT-specific accuracy regression versus the other two engines.
-result: issue
-reported: "Возможно мы сломали квантизацию для rt-detr. Раньше было незначительное падение в метриках, сейчас же начиная с tf32 падение идет 6% и более / нет, и для yolo метрики упали, для pytorch и onnx метрики нормальные, а на tensorrt резко падают. у нас видимо проблемы с tensorrt engine"
-severity: blocker
-note: User-directed diagnostic step — verify preprocess/infer/postprocess methods in tensorrt_engine.py match the ones in pytorch_engine.py and onnxruntime_engine.py.
+result: pass
+prior_result: issue (blocker — WR-09 regression: hardcoded float32 output buffers + H2D copy on wrong CUDA stream. Fixed via WR-11 dtype + WR-12 stream synchronisation; rebenchmark confirmed parity restored across rtdetr / yolo11l / yolo26l.)
 
 ## Summary
 
 total: 14
-passed: 3
-issues: 1
-pending: 10
+passed: 14
+issues: 0
+pending: 0
 skipped: 0
 
 ## Gaps
 
 - truth: "TensorRT engine produces mAP parity with PyTorch and ONNX Runtime engines (within ~1-2%) for all models, including YOLO11l, YOLO26l, and RT-DETR"
-  status: fixed_pending_rebenchmark
+  status: fixed_and_verified
   reason: "User reported: для yolo метрики упали, для pytorch и onnx метрики нормальные, а на tensorrt резко падают. у нас видимо проблемы с tensorrt engine; и для rt-detr раньше было незначительное падение в метриках, сейчас же начиная с tf32 падение идет 6% и более"
   severity: blocker
   test: 14
