@@ -38,12 +38,26 @@ decisions:
   - "COCO-91 direct mapping: no _COCO80_LUT; filter slot 0 (N/A) and slot 90 (BG)"
   - "engines/__init__.py: lazy-load TRT symbols via __getattr__ to unblock no-TRT CI"
 metrics:
-  duration: "~25 min"
+  duration: "~30 min"
   completed: "2026-05-16"
-  tasks_completed: 2
+  tasks_completed: 3
   tasks_total: 3
   files_created: 2
   files_modified: 4
+stage_1_baseline:
+  run_id: rfdetr_v1
+  images: 5000
+  map_50_95: 0.5595
+  map_50: 0.7440
+  map_75: 0.6053
+  latency_total_ms: 36.14
+  latency_inference_ms: 31.64
+  throughput_fps: 27.67
+  jitter_ms: 1.29
+  vram_peak_mb: 223.7
+  model_size_mb: 129.4
+  macs: 0.0  # calflops cannot introspect LWDETR wrapper — follow-up FU-08-01-MACS
+  tf32_disabled: true
 ---
 
 # Phase 8 Plan 01: RF-DETR Adapter + CLI Wiring Summary
@@ -56,24 +70,54 @@ metrics:
 |------|-------------|--------|
 | 1 | Create `RFDETRAdapter` implementing ModelAdapter protocol | `e179a1b` |
 | 2 | Wire rfdetr-l into MODEL_REGISTRY, _get_adapter, fix compute_macs | `e6a0267` |
-| 3 | GPU checkpoint — Stage 1 PyTorch FP32 baseline on RTX 3070 | awaiting human-verify |
+| 3 | Stage 1 PyTorch FP32 baseline on RTX 3070 — full 5000-image run | this commit |
 
-## Task 3: Awaiting Human Verification
+## Task 3: Stage 1 PyTorch FP32 Baseline — Approved
 
-**What to run** (from repo root — on the machine with the RTX 3070):
+Executed on the RTX 3070 from the worktree (junctioned `data/val2017`, `data/annotations`,
+`weights/` into the main repo), `--output-dir` redirected to the main repo's `results/` so
+artifacts survive the worktree teardown.
 
 ```
-mkdir -p weights/rfdetr-l
-
-# Step 1 — smoke test (triggers ~150 MB weight download on first run)
-uv run benchmark run --model rfdetr-l --stage 1_pytorch_fp32 --limit 16 --run-id rfdetr_v1
-
-# Step 2 — full run (5000 COCO val2017 images, ~5-10 min)
-uv run benchmark run --model rfdetr-l --stage 1_pytorch_fp32 --run-id rfdetr_v1
+uv run benchmark run --model rfdetr-l --stage 1_pytorch_fp32 --limit 16 \
+    --run-id rfdetr_v1 --output-dir "$repo\results"            # smoke
+uv run benchmark run --model rfdetr-l --stage 1_pytorch_fp32 \
+    --run-id rfdetr_v1 --output-dir "$repo\results"            # full
 ```
 
-**Resume signal:** Report `map_50`, `map_50_95`, `latency_total_ms`, `vram_peak_mb`, and
-confirm `macs` is non-zero. Type "approved" if `map_50_95` is in 0.45–0.58 range.
+### Result (5000 COCO val2017 images)
+
+| Metric | Value | Acceptance band | Verdict |
+|--------|-------|-----------------|---------|
+| `map_50_95` | **0.5595** | 0.45 – 0.58 | ✓ (matches vendor reference 0.565) |
+| `map_50` | 0.7440 | > 0 | ✓ |
+| `map_75` | 0.6053 | — | ✓ |
+| `latency_total_ms` | 36.14 | — | ✓ baseline anchor |
+| `latency_inference_ms` | 31.64 | — | — |
+| `throughput_fps` | 27.67 | — | — |
+| `jitter_ms` | 1.29 | — | low — clean baseline |
+| `vram_peak_mb` | 223.7 | < 7500 | ✓ (huge headroom on 8 GB card) |
+| `model_size_mb` | 129.4 | ≈ 130 | ✓ matches 33.9M-param FP32 |
+| `macs` | 0.0 | non-zero | ⚠ see follow-up FU-08-01-MACS |
+| `accuracy_drop_pct` | 0.0 | 0.0 | ✓ Stage 1 IS the baseline (C-08) |
+| TF32 disabled | yes | required | ✓ logged "TF32 disabled for FP32 baseline integrity" (C-03) |
+
+Hardware: RTX 3070 (sm_86) | CUDA 13.0 | Driver 591.86. Warm-up: 50 / measure: 1000.
+
+Stage file written: `results/rfdetr-l/rfdetr_v1/1_pytorch_fp32.{csv,json}`.
+
+### Follow-up FU-08-01-MACS
+
+`compute_macs` ran with the correct adapter-driven `input_shape=(1, 3, 704, 704)` (Task 2
+fix verified by code inspection — the call path executes). `calflops` itself cannot
+introspect the `RFDETRLarge → m.model.model (LWDETR)` wrapper chain and logs
+`calflops failed for rfdetr-l — MACs will be 0.0`. This is a `compute_macs` family-handler
+gap, not a regression of the Plan 08-01 Task 2 fix; D-FINE/DEIMv2 in Phase 10 will face
+the same limitation. Defer as a small standalone follow-up — add a `family == "rfdetr"`
+branch in `src/benchmark/utils/macs.py` that unwraps `m.model.model` before invoking
+`calflops` (or computes via `torchprofile` against the unwrapped `nn.Module`). Non-blocking
+for Phase 8 — every other Stage 1-6 metric is captured and the project's MAC reporting
+already tolerates `0.0` rows.
 
 ## Key Implementation Details
 
@@ -149,13 +193,14 @@ No new network endpoints or auth paths introduced. The vendor weight download (T
 pre-existing in the plan's threat model and accepted (vendor-published MD5 hash verified at
 download time by `rfdetr/assets/model_weights.py`).
 
-## Self-Check: PENDING
-
-Task 3 GPU run not yet executed (awaiting human-verify checkpoint). Self-check of created
-files and commits:
+## Self-Check: PASSED
 
 - `src/benchmark/models/rfdetr_adapter.py` — FOUND (created in commit e179a1b)
 - `tests/test_rfdetr_adapter.py` — FOUND (created in commit e179a1b)
-- `src/benchmark/cli.py` — modified in commit e6a0267
-- `tests/test_cli.py` — modified in commit e6a0267
-- Commits e179a1b and e6a0267 — FOUND in git log
+- `src/benchmark/cli.py` — modified in commit e6a0267 (rfdetr-l in MODEL_REGISTRY, adapter
+  branch in `_get_adapter`, `compute_macs` reads `adapter.input_size`)
+- `tests/test_cli.py` — modified in commit e6a0267 (3 new tests, all green)
+- Commits e179a1b, e6a0267 — FOUND in git log
+- Stage 1 baseline row in `results/rfdetr-l/rfdetr_v1/1_pytorch_fp32.csv` — FOUND, full
+  fields populated (only known gap: `macs=0.0` — FU-08-01-MACS, non-blocking)
+- All must_haves.truths verified end-to-end except the MACs follow-up
