@@ -108,5 +108,24 @@ skipped: 0
     - "Per-output dtype query via engine.get_tensor_dtype(name) in _load_engine"
     - "Output buffer allocation respecting the queried dtype"
   debug_session: ""
-  fix_commit: pending
+  fix_commit: "963e094 (WR-11 dtype) + WR-12 (stream race) pending commit"
+  second_finding: |
+    After WR-11 user re-ran rt-detr and still saw TF32 mAP drop 6%+. Second
+    diagnostic pass on git history surfaced a CUDA stream race introduced by
+    the same commit 150bb78 (WR-09): the host->device input copy uses
+    `self._input_buf.copy_(..., non_blocking=True)` on the DEFAULT CUDA
+    stream, while TRT executes on a CUSTOM stream (`self._stream`). Nothing
+    synchronises the two — TRT can begin reading the input buffer before the
+    H2D upload has finished, producing partial/stale input and a global mAP
+    collapse on every TRT stage and model.
+
+    Pre-WR-09 code used `torch.as_tensor(inputs_np, device="cuda")`, which is
+    a synchronous H2D copy — the data was on GPU before `execute_async_v3`
+    was called, so no race. WR-09 unintentionally regressed this by
+    switching to an async copy on a different stream.
+
+    RT-DETR's ONNX only ships `logits` and `pred_boxes` (both float32), so
+    the WR-11 dtype fix did nothing for it — the stream race was the only
+    bug for RT-DETR.
+  second_fix: "WR-12 wraps the H2D copy in `with torch.cuda.stream(self._stream):` so the copy and execute are queued on the same stream and ordered by stream semantics. WR-09's allocator-churn benefit is preserved."
   followup_required: "User must re-run all Phase 7 TRT stages (3-6) for rt-detr, yolo11l, yolo26l with `--force-rebuild` (or after deleting stale engines) and re-merge. Phase 7 SUMMARY tables will need updated mAP/latency rows once the new results land."

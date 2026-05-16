@@ -490,11 +490,15 @@ class TensorRTEngine(BaseEngine):
 
         inputs_np = np.ascontiguousarray(inputs, dtype=np.float32)  # type: ignore[arg-type]
 
-        # WR-09: copy host input into the persistent CUDA buffer instead of
-        # allocating a fresh tensor per call. The 1000-iteration measurement
-        # loop no longer fragments the CUDA allocator, so vram_peak_mb
-        # reflects steady-state working set instead of allocator churn.
-        self._input_buf.copy_(torch.from_numpy(inputs_np), non_blocking=True)
+        # WR-12: serialize the H2D input copy on the SAME stream TRT executes
+        # on. The previous code queued the async copy on the default stream
+        # while TRT ran on self._stream; nothing synchronised the two and TRT
+        # could start reading the input buffer before the upload finished,
+        # producing partial/stale input → silent global mAP collapse on every
+        # TRT stage and model. The stream context makes the copy and execute
+        # run in stream order, preserving WR-09's allocator-churn benefit.
+        with torch.cuda.stream(self._stream):
+            self._input_buf.copy_(torch.from_numpy(inputs_np), non_blocking=True)
         self._context.set_tensor_address(self._input_name, self._input_buf.data_ptr())
 
         # WR-09: reuse persistent output buffers allocated in _load_engine.
