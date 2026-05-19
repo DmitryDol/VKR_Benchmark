@@ -162,6 +162,7 @@
 | 10.1. Final Diploma Data Export | 0/0 | Not started | - |
 | 11. Batch Orchestration & Resource Management | 0/0 | Not started | - |
 | 12. Unified Reporting & Summarization | 0/0 | Not started | - |
+| 13. VKR Diploma Artifacts (per-class AP, confusion matrices, qualitative, demo, docs) | 7/7 | Completed | 2026-05-19 |
 </content>
 
 ### Phase 13: VKR diploma artifacts: per-class AP in JSON reports, confusion matrices (12x12 supercategory + 80x80 full), per-class summary tables for 4 models, COCO collage, qualitative detection examples, realtime video demo with FPS overlay, console screenshots. Strict scope: 35 valid configurations (4 models x 10 stages minus 5 defective RF-DETR INT8/Mixed). Hybrid layout: src/benchmark/eval/ modules + scripts/ CLI entry points. Adds per_class_ap to BenchmarkResult, caches coco_dt_*.json on re-evaluation pass over existing TRT engines, then runs analytics postprocessors. Deterministic outputs. Spec: prompt4edits/code-agent-vkr-artifacts.md
@@ -172,10 +173,10 @@
 **Plans:** 7 plans
 
 Plans:
-- [ ] 13.01-PLAN.md - Per-class AP infrastructure (eval/per_class.py + BenchmarkResult.per_class_ap + scripts/build_per_class_ap.py + backfill 35 stage JSONs)
-- [ ] 13.02-PLAN.md - Confusion matrices (eval/confusion.py + scripts/build_confusion.py + 35 PNG each at 12x12 and 80x80)
-- [ ] 13.03-PLAN.md - Per-class summary tables (scripts/per_class_summary.py + 8 CSV + 8 MD)
-- [ ] 13.04-PLAN.md - Qualitative detection examples (scripts/qualitative_examples.py + 12 collage PNG)
-- [ ] 13.05-PLAN.md - COCO val2017 sample collage (scripts/coco_collage.py + 1 PNG)
-- [ ] 13.06-PLAN.md - Realtime video demo (scripts/realtime_demo.py, MP4 deferred until data/demo.mp4)
-- [ ] 13.07-PLAN.md - Screenshot capture docs (media/screenshots/README.md)
+- [x] 13.01-PLAN.md - Per-class AP infrastructure (eval/per_class.py + BenchmarkResult.per_class_ap + scripts/build_per_class_ap.py + backfill 35 stage JSONs)
+- [x] 13.02-PLAN.md - Confusion matrices (eval/confusion.py + scripts/build_confusion.py + 35 PNG each at 12x12 and 80x80)
+- [x] 13.03-PLAN.md - Per-class summary tables (scripts/per_class_summary.py + 8 CSV + 8 MD)
+- [x] 13.04-PLAN.md - Qualitative detection examples (scripts/qualitative_examples.py + 12 collage PNG)
+- [x] 13.05-PLAN.md - COCO val2017 sample collage (scripts/coco_collage.py + 1 PNG)
+- [x] 13.06-PLAN.md - Realtime video demo (scripts/realtime_demo.py, MP4 deferred until data/demo.mp4)
+- [x] 13.07-PLAN.md - Screenshot capture docs (media/screenshots/README.md)
