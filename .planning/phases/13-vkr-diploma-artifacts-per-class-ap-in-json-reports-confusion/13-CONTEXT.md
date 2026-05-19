@@ -83,7 +83,8 @@ Strict scope is 35 valid configurations: 4 models × 10 stages = 40, minus the 5
 - Strict ruff conformance (the project's `strict` rule set in `pyproject.toml`).
 - All new modules/functions fully type-annotated. `from __future__ import annotations` at the top.
 - Module-level logger per module.
-- No new runtime dependencies. Use only what's already in `pyproject.toml`: `pycocotools`, `opencv-python`, `pillow`, `matplotlib`, `seaborn`, `numpy`, `pandas`.
+- No new runtime dependencies. Use only what's already in `pyproject.toml`: `pycocotools`, `opencv-python`, `pillow`, `matplotlib`, `numpy`.
+- Note: `matplotlib` and `opencv-python` are added to `pyproject.toml` in Plan 13.01 as the first task — they were transitively available via `ultralytics`/`supervision` but are now first-party deps for safety.
 - Re-use existing `ResultLogger` / `BenchmarkResult` infrastructure — the per-class field extends `BenchmarkResult` (`per_class_ap: list[dict] = field(default_factory=list)`); the CSV writer ignores the new field (CSV doesn't need it; JSON does).
 
 ### What NOT to do (locked)
