@@ -4,10 +4,10 @@ milestone: v2.0
 milestone_name: v2.0_models_integration
 status: "Phase 8 shipped — PR #7"
 stopped_at: Phase 8 context gathered (RF-DETR full pipeline; roadmap re-scoped 8/9/10/11/12)
-last_updated: "2026-05-16T23:58:22.745Z"
+last_updated: "2026-05-17T00:45:36.078Z"
 last_activity: 2026-05-17
 progress:
-  total_phases: 7
+  total_phases: 10
   completed_phases: 2
   total_plans: 8
   completed_plans: 8
@@ -56,6 +56,14 @@ Last activity: 2026-05-17
 | Phase 07-yolo-family-quantization-stages-2-6 P04 | ~2.5h | 2 tasks | 8 files |
 
 ## Accumulated Context
+
+### Roadmap Evolution
+
+- Phase 09.1 inserted after Phase 9: Sensitivity Analysis (Strategy C) — Implementation + 4 Models (URGENT)
+- Phase 09.2 inserted after Phase 9: Strategy C Data Export (intermediate) (URGENT)
+- Phase 10 edited: expanded scope to include Strategy C (depends on Phase 09.1); added criterion #4 for Strategy C application; updated criterion #5 to evaluate best across A/B/C
+- Phase 10.1 inserted after Phase 10: Final Diploma Data Export (URGENT)
+- Phase 13 added: VKR diploma artifacts (per-class AP, confusion matrices 12x12/80x80, per-class summaries, COCO collage, qualitative examples, realtime video, screenshots) — advisor revision pass, 35 valid configurations
 
 ### Decisions
 
