@@ -301,7 +301,7 @@ def render_confusion_png(
     fontsize_tick = 6 if n > _LARGE_MATRIX_THRESHOLD else 9
 
     fig, ax = plt.subplots(figsize=figsize_in)
-    im = ax.imshow(matrix_norm, cmap="viridis", vmin=0.0, vmax=1.0)
+    im = ax.imshow(matrix_norm, cmap="Blues", vmin=0.0, vmax=1.0)
 
     ax.set_xticks(range(n))
     ax.set_xticklabels(class_labels, rotation=45, ha="right", fontsize=fontsize_tick)

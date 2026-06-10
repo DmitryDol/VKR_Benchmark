@@ -75,6 +75,27 @@ RFDETR_L_INVALID_STAGES: frozenset[str] = frozenset(
     }
 )
 
+# Human-readable display names for figure titles.
+MODEL_DISPLAY: dict[str, str] = {
+    "rt-detr": "RT-DETR",
+    "yolo11l": "YOLO11L",
+    "yolo26l": "YOLO26L",
+    "rfdetr-l": "RF-DETR-L",
+}
+
+STAGE_DISPLAY: dict[str, str] = {
+    "1_pytorch_fp32": "PyTorch FP32",
+    "2_onnx_fp32": "ONNX FP32",
+    "3_trt_tf32": "TRT TF32",
+    "4_trt_fp16": "TRT FP16",
+    "4_trt_bf16": "TRT BF16",
+    "5_trt_int8_entropy": "TRT INT8 Entropy",
+    "5_trt_int8_minmax": "TRT INT8 MinMax",
+    "5_trt_int8_percentile": "TRT INT8 Percentile",
+    "6_trt_mixed_a": "TRT Смешанная точность 1",
+    "6_trt_mixed_b": "TRT Смешанная точность 2",
+}
+
 app = typer.Typer(
     name="build-confusion",
     help="Render 12x12 and 80x80 confusion-matrix PNGs for all 35 valid configurations.",
@@ -164,23 +185,6 @@ def _full_labels(class_names_80: list[str]) -> list[str]:
     return [*class_names_80, BACKGROUND_LABEL]
 
 
-def _read_map_50_95(results_root: Path, model: str, stage: str) -> float:
-    """Read mAP@0.5:0.95 from the stage JSON report.
-
-    Returns 0.0 if the file is missing or the field is absent.
-    """
-    stage_json = results_root / model / VARIANT_DIRS[model] / f"{stage}.json"
-    if not stage_json.exists():
-        logger.warning("Stage JSON missing for %s/%s — using mAP=0.0 in title", model, stage)
-        return 0.0
-    try:
-        data: dict[str, object] = json.loads(stage_json.read_text(encoding="utf-8"))
-        return float(data.get("map_50_95", 0.0))  # type: ignore[arg-type]
-    except (json.JSONDecodeError, OSError, TypeError, ValueError):
-        logger.warning("Could not read map_50_95 from %s — using 0.0", stage_json)
-        return 0.0
-
-
 # ---------------------------------------------------------------------------
 # CLI command
 # ---------------------------------------------------------------------------
@@ -196,10 +200,6 @@ def main(
         list[str] | None,
         typer.Option("--stage", "-s", help="Stage ID(s) to process (default: all)"),
     ] = None,
-    results_root: Annotated[
-        Path,
-        typer.Option("--results-root", help="Root directory of benchmark result JSONs"),
-    ] = Path("results"),
     cache_root: Annotated[
         Path,
         typer.Option("--cache-root", help="Directory containing cached COCO prediction JSONs"),
@@ -229,7 +229,9 @@ def main(
     )
 
     if not annotations.exists():
-        logger.warning("Annotations file not found: %s -- cannot build confusion matrices", annotations)  # noqa: E501
+        logger.warning(
+            "Annotations file not found: %s -- cannot build confusion matrices", annotations
+        )  # noqa: E501
         typer.echo(f"ERROR: annotations not found at {annotations}")
         raise typer.Exit(code=1)
 
@@ -284,14 +286,10 @@ def main(
             matrix_80_norm = row_normalize(matrix_80_counts)
             matrix_12_norm = row_normalize(matrix_12_counts)
 
-            map_val = _read_map_50_95(results_root, model, stage)
-
-            title_12 = (
-                f"Confusion 12x12 -- {model} / {stage} / mAP@0.5:0.95 = {map_val:.3f}"
-            )
-            title_80 = (
-                f"Confusion 80x80 -- {model} / {stage} / mAP@0.5:0.95 = {map_val:.3f}"
-            )
+            model_display = MODEL_DISPLAY.get(model, model.upper())
+            stage_display = STAGE_DISPLAY.get(stage, stage)
+            title_12 = f"{model_display} {stage_display}"
+            title_80 = title_12
 
             render_confusion_png(
                 matrix_12_norm,
