@@ -1,0 +1,38 @@
+# Документация VKR Benchmark
+
+Это навигационный индекс по документации проекта **VKR Benchmark** — системы аппаратной
+оптимизации и бенчмаркинга инференса трансформерных детекторов объектов. Общий обзор проекта —
+в корневом [README.md](../README.md).
+
+## Карта документации
+
+| # | Документ | Содержание | Для кого |
+|:-:|----------|------------|----------|
+| 1 | [architecture.md](architecture.md) | Слоистая архитектура, паттерны (`BaseEngine` / `ModelAdapter`), поток данных, ключевые абстракции, карта файлов `src/benchmark/`. | Разработчики |
+| 2 | [pipeline.md](pipeline.md) | **Ядро проекта.** Шесть стадий оптимизации, флаги точности TensorRT, INT8-калибровка (MinMax / Entropy / Percentile), Mixed Precision (Strategy A/B), инженерные правила (TF32 off, 2 ГБ workspace, BF16-проверка). | Все |
+| 3 | [models.md](models.md) | Поддерживаемые модели и их адаптеры, разрешения и маппинг классов (COCO-80 ↔ COCO-91), особенности препроцессинга/постпроцессинга, эффект «отката» INT8 у RF-DETR, инструкция по добавлению новой модели. | Все |
+| 4 | [getting-started.md](getting-started.md) | Установка через uv, загрузка COCO и весов, экспорт ONNX, запуск бенчмарка, все флаги CLI, типовые сценарии. | Пользователи |
+| 5 | [metrics.md](metrics.md) | Логируемые метрики, протокол замеров (50 + 1000 итераций), схема `BenchmarkResult`, форматы CSV/JSON, словарь колонок `results.csv`. | Все |
+| 6 | [results-and-artifacts.md](results-and-artifacts.md) | Где лежат результаты и артефакты и как их интерпретировать: Pareto-кривые, матрицы ошибок, таблицы per-class AP, qualitative-примеры. | Все |
+| 7 | [scripts.md](scripts.md) | Справочник по всем скриптам в `scripts/` и `data/`: назначение, вход, выход, пример запуска. | Пользователи |
+| 8 | [environment.md](environment.md) | Целевое оборудование (RTX 3070), матрица версий, инженерные ограничения и инварианты, нюансы CUDA. | Разработчики |
+
+## Рекомендуемые маршруты чтения
+
+**Хочу быстро запустить бенчмарк:**
+[getting-started.md](getting-started.md) → [scripts.md](scripts.md) → [results-and-artifacts.md](results-and-artifacts.md)
+
+**Пишу научную часть диплома:**
+[pipeline.md](pipeline.md) → [metrics.md](metrics.md) → [results-and-artifacts.md](results-and-artifacts.md) → [models.md](models.md)
+
+**Хочу понять/расширить код:**
+[architecture.md](architecture.md) → [models.md](models.md#как-добавить-новую-модель) → [pipeline.md](pipeline.md) → [environment.md](environment.md)
+
+## Условные обозначения
+
+- Ссылки на исходный код даны относительно корня репозитория, например
+  [`src/benchmark/cli.py`](../src/benchmark/cli.py).
+- Идентификаторы стадий (`1_pytorch_fp32`, `5_trt_int8_entropy`, …) совпадают со значениями
+  флага `--stage` в CLI и с именами файлов результатов.
+- Решения вида `D-07`, `C-10`, `WR-09` — ссылки на журнал инженерных решений в
+  [`.planning/`](../.planning/); в коде они приведены в комментариях у соответствующих мест.
