@@ -1,17 +1,17 @@
 ---
 gsd_state_version: 1.0
 milestone: v2.0
-milestone_name: v2.0_models_integration
-status: "Phase 8 shipped — PR #7"
+milestone_name: Models Integration
+status: completed
 stopped_at: Phase 8 context gathered (RF-DETR full pipeline; roadmap re-scoped 8/9/10/11/12)
-last_updated: "2026-05-16T23:58:22.745Z"
-last_activity: 2026-05-17
+last_updated: "2026-05-19T19:37:58.751Z"
+last_activity: 2026-05-19 -- Phase 13 marked complete
 progress:
-  total_phases: 7
-  completed_phases: 2
-  total_plans: 8
-  completed_plans: 8
-  percent: 100
+  total_phases: 11
+  completed_phases: 3
+  total_plans: 15
+  completed_plans: 15
+  percent: 27
 ---
 
 # Project State
@@ -21,14 +21,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-09)
 
 **Core value:** Scientifically rigorous, per-stage metric logging showing optimization evolution for transformer-based object detectors.
-**Current focus:** Phase 08 — rf-detr-integration-quantization-stages-1-6
+**Current focus:** Phase 13 — vkr-diploma-artifacts (shipped; awaiting user `--live` pass for cache backfill)
 
 ## Current Position
 
-Phase: 08 (rf-detr-integration-quantization-stages-1-6) — EXECUTING
-Plan: 1 of 4
-Status: Phase 8 shipped — PR #7
-Last activity: 2026-05-17
+Phase: 13 — COMPLETE (7/7 plans)
+Status: Phase 13 shipped. Cache-dependent artifacts deferred until user runs `scripts/build_per_class_ap.py --live`.
+Last activity: 2026-05-19 -- Phase 13 marked complete
 
 ## Performance Metrics
 
@@ -57,6 +56,14 @@ Last activity: 2026-05-17
 
 ## Accumulated Context
 
+### Roadmap Evolution
+
+- Phase 09.1 inserted after Phase 9: Sensitivity Analysis (Strategy C) — Implementation + 4 Models (URGENT)
+- Phase 09.2 inserted after Phase 9: Strategy C Data Export (intermediate) (URGENT)
+- Phase 10 edited: expanded scope to include Strategy C (depends on Phase 09.1); added criterion #4 for Strategy C application; updated criterion #5 to evaluate best across A/B/C
+- Phase 10.1 inserted after Phase 10: Final Diploma Data Export (URGENT)
+- Phase 13 added: VKR diploma artifacts (per-class AP, confusion matrices 12x12/80x80, per-class summaries, COCO collage, qualitative examples, realtime video, screenshots) — advisor revision pass, 35 valid configurations
+
 ### Decisions
 
 Decisions are logged in PROJECT.md Key Decisions table.
@@ -82,4 +89,6 @@ Resume file: .planning/phases/08-rf-detr-integration-quantization-stages-1-6/08-
 
 ## Operator Next Steps
 
-- Execute Phase 7 with `/gsd-execute-phase 7`
+- Run live cache backfill: `uv run python scripts/build_per_class_ap.py --live` (24+ hour GPU pass). After it completes, re-run `build_confusion.py`, `per_class_summary.py`, `qualitative_examples.py` to produce the 35 backfilled JSONs + 70 confusion PNGs + 16 summary tables + 12 qualitative PNGs.
+- Place `data/demo.mp4` and run `scripts/realtime_demo.py` to emit the 3 deferred MP4s.
+- Capture the 3 manual screenshots per `media/screenshots/README.md`.

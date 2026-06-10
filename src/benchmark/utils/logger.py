@@ -6,7 +6,7 @@ import csv
 import json
 import logging
 import math
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -88,6 +88,9 @@ class BenchmarkResult:
     vram_peak_mb: float
     macs: float | None = None
     flops: float | None = None
+
+    # Per-class AP (Phase 13) — JSON only; excluded from CSV writes
+    per_class_ap: list[dict[str, int | float | str]] = field(default_factory=list)
 
     # Hardware info (D-01) — flat columns, pandas-friendly
     hw_gpu: str = ""
@@ -171,14 +174,16 @@ class ResultLogger:
 
         row = asdict(result)
 
-        # CSV
+        # CSV — per_class_ap is a nested list; dropping it keeps the flat schema intact
+        row_csv = dict(row)
+        row_csv.pop("per_class_ap", None)
         csv_path = stage_dir / f"{result.stage}.csv"
         with csv_path.open("w", newline="", encoding="utf-8") as f:
-            writer = csv.DictWriter(f, fieldnames=row.keys())
+            writer = csv.DictWriter(f, fieldnames=row_csv.keys())
             writer.writeheader()
-            writer.writerow(row)
+            writer.writerow(row_csv)
 
-        # JSON
+        # JSON — keep the full row including per_class_ap
         json_path = stage_dir / f"{result.stage}.json"
         json_path.write_text(
             json.dumps(row, indent=2, ensure_ascii=False), encoding="utf-8"
@@ -285,7 +290,7 @@ class ResultLogger:
         )
         return out_path
 
-    def merge_to_unified(self, model_name: str) -> tuple[Path, Path]:
+    def merge_to_unified(self, model_name: str) -> tuple[Path, Path]:  # noqa: PLR0912, PLR0915
         """Merge all per-stage CSVs for model_name into unified files (D-06).
 
         Reads: results/{model_name}/{run_id}/*.csv (sorted by filename = stage order)
@@ -355,7 +360,7 @@ class ResultLogger:
         fieldnames: list[str] = []
         seen: set[str] = set()
         for row in merged_rows:
-            for key in row.keys():
+            for key in row:
                 if key not in seen:
                     fieldnames.append(key)
                     seen.add(key)
@@ -405,12 +410,17 @@ class ResultLogger:
             ])
 
         # Write summary.txt
-        col_widths = [max(len(str(item)) for item in col) for col in zip(headers, *rows, strict=False)]
+        col_widths = [
+            max(len(str(item)) for item in col)
+            for col in zip(headers, *rows, strict=False)
+        ]
         txt_lines = []
         txt_lines.append(" | ".join(h.ljust(w) for h, w in zip(headers, col_widths, strict=False)))
         txt_lines.append("-+-".join("-" * w for w in col_widths))
         for row in rows:
-            txt_lines.append(" | ".join(str(item).ljust(w) for item, w in zip(row, col_widths, strict=False)))
+            txt_lines.append(
+                " | ".join(str(item).ljust(w) for item, w in zip(row, col_widths, strict=False))
+            )
         txt_path.write_text("\n".join(txt_lines) + "\n", encoding="utf-8")
 
         # Write summary.md
@@ -434,6 +444,8 @@ class ResultLogger:
         """Append a single result row to the unified CSV file."""
         csv_path = self.output_dir / "results.csv"
         row = asdict(result)
+        # per_class_ap is a nested list; dropping it keeps the flat CSV schema intact
+        row.pop("per_class_ap", None)
         file_exists = csv_path.exists()
 
         with csv_path.open("a", newline="", encoding="utf-8") as f:

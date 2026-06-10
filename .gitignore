@@ -22,5 +22,8 @@ weights/*
 # Cache
 .ruff_cache/
 
+# Phase 13 per-class AP / prediction cache
+cache/
+
 # intermediate results (DELETE after done)
 results/

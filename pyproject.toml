@@ -40,6 +40,10 @@ dependencies = [
     "nvidia-cudnn-cu12>=9.22.0.52",
     "nvidia-cublas-cu12>=12.9.2.10",
     "nvidia-cufft-cu12>=11.4.1.4",
+    "matplotlib>=3.10",
+    "opencv-python>=4.10",
+    "seaborn>=0.13.2",
+    "adjusttext>=1.3.0",
 ]
 
 [project.scripts]
