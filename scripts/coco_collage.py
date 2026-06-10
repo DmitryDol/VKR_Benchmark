@@ -23,23 +23,22 @@ random.seed(0)
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Hardcoded image selection — ONE per supercategory bin per advisor spec.
+# Hardcoded image selection — covers 7 supercategory bins and all 3 qualitative
+# scenarios (dense=139, large_single=285, occluded=776) so the collage shares
+# images with media/qualitative/ for diploma narrative continuity.
 # Sorted ascending by image_id (defines left-to-right, top-to-bottom grid order).
-# Deterministically precomputed on 2026-05-19 against instances_val2017.json:
-#   for each supercategory bin, pick smallest image_id with >=2 non-iscrowd GTs
-#   matching the bin; break ties by bin order below (first bin wins, other bin
-#   takes next-smallest distinct id matching its rule).
+# Deterministically precomputed on 2026-05-19 against instances_val2017.json.
 # ---------------------------------------------------------------------------
 SAMPLE_IMAGE_IDS: tuple[tuple[int, str], ...] = (
-    (139, "furniture: chairs + dining table"),
+    (139, "furniture: chairs + dining table (qualitative: dense)"),
+    (285, "qualitative: large_single (>=40% area GT)"),
     (724, "outdoor (no person): outdoor signage"),
+    (776, "qualitative: occluded (>=1 GT pair IoU>=0.30)"),
     (872, "sports: >=2 sports-supercat GTs"),
     (1268, "person + vehicle: street scene"),
-    (1503, "electronic: >=2 electronic-supercat GTs (next-smallest)"),
+    (1503, "electronic: >=2 electronic-supercat GTs"),
     (1818, "animal: >=2 animal-supercat GTs"),
     (2157, "kitchen: >=2 kitchen-supercat GTs"),
-    (2587, "food: >=2 food-supercat GTs"),
-    (5001, "indoor + accessory: at least 1 each"),
 )
 
 # ---------------------------------------------------------------------------
@@ -59,6 +58,10 @@ LABEL_SCALE: float = 0.5
 LABEL_THICKNESS: int = 1
 # Minimum non-crowd annotation count used in _verify_sample_ids assertions.
 MIN_ANNOTATION_COUNT: int = 2
+# Qualitative-scenario thresholds shared with scripts/qualitative_examples.py.
+_LARGE_SINGLE_MIN_AREA_FRAC: float = 0.40
+_OCCLUDED_MIN_GT: int = 2
+_OCCLUDED_MIN_IOU: float = 0.30
 
 # Default paths (referenced in CLI defaults).
 _DEFAULT_IMAGES_DIR: Path = Path("data/val2017")
@@ -190,8 +193,25 @@ def _assemble_grid(tiles_bgr: list[np.ndarray]) -> np.ndarray:
     return canvas
 
 
+def _iou_xywh(a: list[float], b: list[float]) -> float:
+    """Compute IoU between two COCO-format [x, y, w, h] boxes."""
+    ax1, ay1, aw, ah = a
+    bx1, by1, bw, bh = b
+    ax2, ay2 = ax1 + aw, ay1 + ah
+    bx2, by2 = bx1 + bw, by1 + bh
+    ix1 = max(ax1, bx1)
+    iy1 = max(ay1, by1)
+    ix2 = min(ax2, bx2)
+    iy2 = min(ay2, by2)
+    inter_w = max(0.0, ix2 - ix1)
+    inter_h = max(0.0, iy2 - iy1)
+    inter = inter_w * inter_h
+    union = aw * ah + bw * bh - inter
+    return inter / union if union > 0.0 else 0.0
+
+
 def _verify_sample_ids(coco_json: dict[str, object]) -> None:
-    """Assert each hardcoded image_id satisfies its supercategory constraint.
+    """Assert each hardcoded image_id satisfies its bin constraint.
 
     Developer-time sanity check — failure means the annotations file diverged
     from the 2026-05-19 baseline used to select these ids.
@@ -200,6 +220,10 @@ def _verify_sample_ids(coco_json: dict[str, object]) -> None:
         c["id"]: c["supercategory"]  # type: ignore[index]
         for c in coco_json["categories"]  # type: ignore[union-attr]
     }
+    image_sizes: dict[int, tuple[int, int]] = {}
+    for img in coco_json["images"]:  # type: ignore[union-attr]
+        image_sizes[int(img["id"])] = (int(img["width"]), int(img["height"]))  # type: ignore[index]
+
     anns_by_image: dict[int, list[dict[str, object]]] = {}
     for ann in coco_json["annotations"]:  # type: ignore[union-attr]
         img_id: int = ann["image_id"]  # type: ignore[index]
@@ -207,11 +231,15 @@ def _verify_sample_ids(coco_json: dict[str, object]) -> None:
             anns_by_image[img_id] = []
         anns_by_image[img_id].append(ann)  # type: ignore[arg-type]
 
+    def non_crowd_anns(image_id: int) -> list[dict[str, object]]:
+        return [
+            a for a in anns_by_image.get(image_id, []) if a.get("iscrowd", 0) == 0
+        ]
+
     def non_crowd_supercats(image_id: int) -> list[str]:
         return [
             cat_to_supercat.get(a["category_id"], "")  # type: ignore[arg-type]
-            for a in anns_by_image.get(image_id, [])
-            if a.get("iscrowd", 0) == 0
+            for a in non_crowd_anns(image_id)
         ]
 
     sc_139 = non_crowd_supercats(139)
@@ -219,8 +247,39 @@ def _verify_sample_ids(coco_json: dict[str, object]) -> None:
         f"id=139: expected >={MIN_ANNOTATION_COUNT} furniture, got {sc_139}"
     )
 
+    large_anns_285 = non_crowd_anns(285)
+    w_285, h_285 = image_sizes.get(285, (1, 1))
+    area_285 = w_285 * h_285
+    max_gt_area_285 = max(
+        (float(a["area"]) for a in large_anns_285), default=0.0  # type: ignore[arg-type]
+    )
+    assert max_gt_area_285 >= _LARGE_SINGLE_MIN_AREA_FRAC * area_285, (
+        f"id=285: largest GT area {max_gt_area_285:.0f}"
+        f" < {_LARGE_SINGLE_MIN_AREA_FRAC:.0%} of image area {area_285}"
+    )
+
     sc_724 = non_crowd_supercats(724)
     assert "outdoor" in sc_724, f"id=724: expected outdoor supercategory, got {sc_724}"
+
+    occ_anns_776 = non_crowd_anns(776)
+    assert len(occ_anns_776) >= _OCCLUDED_MIN_GT, (
+        f"id=776: expected >={_OCCLUDED_MIN_GT} non-iscrowd GTs, got {len(occ_anns_776)}"
+    )
+    boxes_776: list[list[float]] = [
+        list(map(float, a["bbox"]))  # type: ignore[arg-type]
+        for a in occ_anns_776
+    ]
+    found_pair = False
+    for i in range(len(boxes_776)):
+        for j in range(i + 1, len(boxes_776)):
+            if _iou_xywh(boxes_776[i], boxes_776[j]) >= _OCCLUDED_MIN_IOU:
+                found_pair = True
+                break
+        if found_pair:
+            break
+    assert found_pair, (
+        f"id=776: no GT pair with IoU >= {_OCCLUDED_MIN_IOU} found"
+    )
 
     sc_872 = non_crowd_supercats(872)
     assert sc_872.count("sports") >= MIN_ANNOTATION_COUNT, (
@@ -244,16 +303,6 @@ def _verify_sample_ids(coco_json: dict[str, object]) -> None:
     sc_2157 = non_crowd_supercats(2157)
     assert sc_2157.count("kitchen") >= MIN_ANNOTATION_COUNT, (
         f"id=2157: expected >={MIN_ANNOTATION_COUNT} kitchen, got {sc_2157}"
-    )
-
-    sc_2587 = non_crowd_supercats(2587)
-    assert sc_2587.count("food") >= MIN_ANNOTATION_COUNT, (
-        f"id=2587: expected >={MIN_ANNOTATION_COUNT} food, got {sc_2587}"
-    )
-
-    sc_5001 = non_crowd_supercats(5001)
-    assert "indoor" in sc_5001 or "accessory" in sc_5001, (
-        f"id=5001: expected indoor or accessory, got {sc_5001}"
     )
 
 

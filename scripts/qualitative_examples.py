@@ -1,19 +1,14 @@
-"""Generate 12 qualitative-detection collage PNGs.
+"""Generate qualitative-detection collage PNGs.
 
-For each (model, scenario) pair produces a 4x2 grid PNG showing the same image
-processed by 8 progressively compressed inference modes:
-  Slot 0 (0,0): PyTorch FP32
-  Slot 1 (0,1): ONNX FP32
-  Slot 2 (0,2): TRT TF32
-  Slot 3 (0,3): TRT FP16
-  Slot 4 (1,0): TRT BF16
-  Slot 5 (1,1): Best INT8 (by mAP@0.5:0.95)
-  Slot 6 (1,2): Worst INT8 (by mAP@0.5:0.95)
-  Slot 7 (1,3): Best Mixed (by mAP@0.5:0.95)
+Layout depends on model:
+  Non-RFDETR (rt-detr / yolo11l / yolo26l): 4x2 grid with 8 modes
+    PyTorch FP32 / ONNX FP32 / TRT TF32 / TRT FP16 / TRT BF16 /
+    Best INT8 / Worst INT8 / Best Mixed.
+  RF-DETR-L: 3x2 grid with the 5 valid stages only (FP32 / ONNX / TF32 / FP16 / BF16);
+    the 6th slot is hidden because INT8 and Mixed tactic-rolled back to FP16.
 
-RF-DETR-L's slots 5/6/7 render a grey placeholder cell (tactic rollback to FP16).
 Predictions are read from cache/predictions/coco_dt_<model>_<stage>.json -- no live
-inference.  When the cache file is missing the cell is reported as skipped.
+inference.  When the cache file is missing the cell shows a "[cache missing]" note.
 
 PNG metadata is stripped via Pillow re-save for sha256-stable output across reruns.
 """
@@ -107,9 +102,9 @@ MODE_LABELS_8: tuple[str, ...] = (
     "TRT TF32",
     "TRT FP16",
     "TRT BF16",
-    "Best INT8",
-    "Worst INT8",
-    "Best Mixed",
+    "Лучший INT8",
+    "Худший INT8",
+    "Лучший смешанный",
 )
 
 # Stage IDs that occupy the first 5 fixed slots.
@@ -242,9 +237,7 @@ def _verify_scenario_ids(annotations_path: Path) -> None:
     logger.info("_verify_scenario_ids: all 3 scenario assertions passed")
 
 
-def _pick_best_worst(
-    model: str, results_root: Path
-) -> tuple[str | None, str | None, str | None]:
+def _pick_best_worst(model: str, results_root: Path) -> tuple[str | None, str | None, str | None]:
     """Return (best_int8_stage, worst_int8_stage, best_mixed_stage) for a model.
 
     RF-DETR-L returns (None, None, None) — placeholder cells rendered instead.
@@ -330,26 +323,23 @@ def _draw_predictions(
         # Solid border (drawn after blend so it stays crisp).
         cv2.rectangle(img, (x, y), (x + w, y + h), BBOX_COLOR_BGR, BBOX_THICKNESS)
 
-        # Class-label text plate.
-        (tw, th), baseline = cv2.getTextSize(
-            text, cv2.FONT_HERSHEY_SIMPLEX, 0.4, 1
-        )
-        ty = max(y - 2, th + 2)
+        (tw, th), baseline = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)
+        ty = max(y - 3, th + 3)
         cv2.rectangle(
             img,
-            (x, ty - th - baseline - 2),
-            (x + tw + 4, ty + 2),
+            (x, ty - th - baseline - 3),
+            (x + tw + 6, ty + 3),
             BBOX_COLOR_BGR,
             -1,
         )
         cv2.putText(
             img,
             text,
-            (x + 2, ty),
+            (x + 3, ty),
             cv2.FONT_HERSHEY_SIMPLEX,
-            0.4,
+            0.6,
             (255, 255, 255),
-            1,
+            2,
             cv2.LINE_AA,
         )
 
@@ -360,48 +350,11 @@ def _render_cell_axes(
     ax: plt.Axes,
     image_rgb: np.ndarray,
     title: str,
-    subtitle: str,
 ) -> None:
     """Render a detection-result cell onto a matplotlib Axes."""
     ax.imshow(image_rgb)
     ax.set_axis_off()
-    ax.set_title(title, fontsize=9)
-    ax.text(0.5, -0.06, subtitle, transform=ax.transAxes, ha="center", fontsize=8)
-
-
-def _render_placeholder_axes(ax: plt.Axes, mode_title: str) -> None:
-    """Render an n/a placeholder cell for RF-DETR-L invalid stages."""
-    ax.set_facecolor((0.5, 0.5, 0.5))
-    ax.set_xticks([])
-    ax.set_yticks([])
-    ax.text(
-        0.5,
-        0.5,
-        "n/a\nRF-DETR-L\ntactic rollback to FP16",
-        transform=ax.transAxes,
-        ha="center",
-        va="center",
-        fontsize=10,
-        color="black",
-    )
-    ax.set_title(mode_title, fontsize=9)
-
-
-def _read_stage_metrics(
-    model: str, stage: str, results_root: Path
-) -> tuple[float, float]:
-    """Return (map_50_95, latency_total_ms) from the stage JSON.
-
-    Returns (-1.0, -1.0) when the file is missing or malformed.
-    """
-    p = results_root / model / VARIANT_DIRS[model] / f"{stage}.json"
-    if not p.exists():
-        return -1.0, -1.0
-    try:
-        d: dict[str, object] = json.loads(p.read_text(encoding="utf-8"))
-        return float(d.get("map_50_95", -1.0)), float(d.get("latency_total_ms", -1.0))  # type: ignore[arg-type]
-    except (json.JSONDecodeError, OSError, TypeError):
-        return -1.0, -1.0
+    ax.set_title(title, fontsize=11)
 
 
 def _load_class_names(annotations_path: Path) -> dict[int, str]:
@@ -421,8 +374,9 @@ def _save_png_stable(fig: plt.Figure, out_path: Path) -> None:
     """
     fig.savefig(
         str(out_path),
-        dpi=120,
+        dpi=150,
         bbox_inches="tight",
+        pad_inches=0.1,
         format="png",
         metadata={"Software": "matplotlib"},
     )
@@ -435,39 +389,82 @@ def _render_collage(
     scenario: str,
     image_id: int,
     image_bgr_src: np.ndarray,
-    stage_ids: tuple[str | None, ...],
     class_names: dict[int, str],
     results_root: Path,
     cache_root: Path,
     out_dir: Path,
 ) -> None:
-    """Render a single 4x2 collage PNG for one (model, scenario) pair."""
-    fig, axes = plt.subplots(2, 4, figsize=(16, 8))
+    """Render a single collage PNG for one (model, scenario) pair.
+
+    RF-DETR-L gets a 3x2 layout with 5 valid stages (last slot hidden).
+    Other models get a 4x2 layout with all 8 modes.
+    """
+    if model == "rfdetr-l":
+        n_rows, n_cols = 2, 3
+        stage_ids: tuple[str | None, ...] = FIXED_STAGE_IDS
+        mode_labels: tuple[str, ...] = MODE_LABELS_8[:5]
+        subplot_w_in: float = 4.5
+    else:
+        best_int8, worst_int8, best_mixed = _pick_best_worst(model, results_root)
+        n_rows, n_cols = 2, 4
+        stage_ids = (*FIXED_STAGE_IDS, best_int8, worst_int8, best_mixed)
+        mode_labels = MODE_LABELS_8
+        subplot_w_in = 4.5
+
+    # Dynamic figsize from source-image aspect ratio: subplot height tracks the
+    # image height so horizontal images (dense/occluded) don't leave vertical
+    # whitespace inside subplot cells, making row spacing visually consistent
+    # across scenarios.
+    src_h, src_w = image_bgr_src.shape[:2]
+    img_aspect = src_w / src_h if src_h > 0 else 1.0
+    subplot_h_in: float = subplot_w_in / img_aspect
+
+    # Absolute row gap (inches) -- just enough for the mode-label title above
+    # each subplot.  Converted to matplotlib's hspace fraction (of subplot
+    # height) so the visual gap is identical regardless of image aspect.
+    row_gap_in: float = 0.45
+    suptitle_reserve_in: float = 0.45
+    hspace_frac: float = row_gap_in / subplot_h_in
+
+    fig_w = subplot_w_in * n_cols + 0.4
+    fig_h = subplot_h_in * n_rows + row_gap_in * (n_rows - 1) + suptitle_reserve_in
+    figsize: tuple[float, float] = (fig_w, fig_h)
+    top_frac = 1.0 - suptitle_reserve_in / fig_h
+
+    fig, axes = plt.subplots(
+        n_rows,
+        n_cols,
+        figsize=figsize,
+        gridspec_kw={"wspace": 0.02, "hspace": hspace_frac, "top": top_frac},
+    )
     fig.suptitle(
-        f"{model} -- scenario: {scenario} (image_id={image_id})",
-        fontsize=12,
+        f"{model}. image_id={image_id}",
+        fontsize=14,
+        y=1.0 - (suptitle_reserve_in * 0.45) / fig_h,
     )
 
-    for slot_idx, (stage, label) in enumerate(zip(stage_ids, MODE_LABELS_8, strict=True)):
-        row, col = divmod(slot_idx, 4)
+    for slot_idx, (stage, label) in enumerate(zip(stage_ids, mode_labels, strict=True)):
+        row, col = divmod(slot_idx, n_cols)
         ax: plt.Axes = axes[row, col]
 
         if stage is None:
-            _render_placeholder_axes(ax, label)
+            ax.set_axis_off()
             continue
 
         preds = _read_predictions(model, stage, image_id, cache_root)
         cache_file = cache_root / f"coco_dt_{model}_{stage}.json"
         if not preds and not cache_file.exists():
-            _render_placeholder_axes(ax, f"{label}\n[cache missing]")
+            ax.set_axis_off()
+            ax.set_title(f"{label}\n[cache missing]", fontsize=11)
             continue
 
         drawn_bgr = _draw_predictions(image_bgr_src.copy(), preds, class_names)
         drawn_rgb = cv2.cvtColor(drawn_bgr, cv2.COLOR_BGR2RGB)
+        _render_cell_axes(ax, drawn_rgb, label)
 
-        map_val, lat_val = _read_stage_metrics(model, stage, results_root)
-        subtitle = f"mAP={map_val:.3f}, lat={lat_val:.1f}ms"
-        _render_cell_axes(ax, drawn_rgb, label, subtitle)
+    for slot_idx in range(len(stage_ids), n_rows * n_cols):
+        row, col = divmod(slot_idx, n_cols)
+        axes[row, col].set_axis_off()
 
     out_path = out_dir / f"{model}_{scenario}.png"
     _save_png_stable(fig, out_path)
@@ -544,18 +541,6 @@ def main(
             logger.warning("Unknown model '%s' -- skipping", model)
             continue
 
-        best_int8, worst_int8, best_mixed = _pick_best_worst(model, results_root)
-        stage_ids: tuple[str | None, ...] = (
-            "1_pytorch_fp32",
-            "2_onnx_fp32",
-            "3_trt_tf32",
-            "4_trt_fp16",
-            "4_trt_bf16",
-            best_int8,
-            worst_int8,
-            best_mixed,
-        )
-
         for scenario in scenarios:
             if scenario not in SCENARIO_IMAGE_IDS:
                 logger.warning("Unknown scenario '%s' -- skipping", scenario)
@@ -567,7 +552,9 @@ def main(
             if not img_path.exists():
                 logger.warning(
                     "[skipped] image not found: %s  (model=%s scenario=%s)",
-                    img_path, model, scenario,
+                    img_path,
+                    model,
+                    scenario,
                 )
                 continue
 
@@ -581,7 +568,6 @@ def main(
                 scenario=scenario,
                 image_id=image_id,
                 image_bgr_src=image_bgr_src,
-                stage_ids=stage_ids,
                 class_names=class_names,
                 results_root=results_root,
                 cache_root=cache_root,
