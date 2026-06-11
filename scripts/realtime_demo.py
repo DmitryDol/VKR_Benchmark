@@ -50,7 +50,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Constants (locked in 13.06-PLAN.md — identical to qualitative_examples.py)
+# Constants
 # ---------------------------------------------------------------------------
 
 DEMO_INPUT_DEFAULT: Path = Path("data/demo.mp4")
@@ -222,9 +222,7 @@ def _select_fastest_yolo(results_root: Path) -> tuple[str, str]:
             fps = _load_json_value(path, "throughput_fps")
             if fps is None:
                 reason = (
-                    "file not found"
-                    if not path.exists()
-                    else "throughput_fps missing/non-numeric"
+                    "file not found" if not path.exists() else "throughput_fps missing/non-numeric"
                 )
                 logger.warning("Skipping %s/%s: %s", model, stage, reason)
                 missing.append(f"{model}/{stage}")
@@ -249,7 +247,7 @@ def _select_fastest_yolo(results_root: Path) -> tuple[str, str]:
 
 
 # ---------------------------------------------------------------------------
-# Engine factory — split into sub-builders to stay within PLR0912/PLR0915 limits
+# Engine factory — split into sub-builders to stay within limits
 # ---------------------------------------------------------------------------
 
 
@@ -467,12 +465,24 @@ def _put_text_outlined(
 ) -> None:
     """Draw text with a black outline for contrast on any background."""
     cv2.putText(
-        img, text, org,
-        cv2.FONT_HERSHEY_SIMPLEX, font_scale, (0, 0, 0), thickness + 1, cv2.LINE_AA,
+        img,
+        text,
+        org,
+        cv2.FONT_HERSHEY_SIMPLEX,
+        font_scale,
+        (0, 0, 0),
+        thickness + 1,
+        cv2.LINE_AA,
     )
     cv2.putText(
-        img, text, org,
-        cv2.FONT_HERSHEY_SIMPLEX, font_scale, (255, 255, 255), thickness, cv2.LINE_AA,
+        img,
+        text,
+        org,
+        cv2.FONT_HERSHEY_SIMPLEX,
+        font_scale,
+        (255, 255, 255),
+        thickness,
+        cv2.LINE_AA,
     )
 
 

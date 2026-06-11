@@ -25,7 +25,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# Module-level constants (D-RF-04, source: rfdetr/detr.py:373-375)
+# Module-level constants (source: rfdetr/detr.py:373-375)
 _INPUT_SIZE: tuple[int, int] = (704, 704)  # native RFDETRLarge resolution
 _IMAGENET_MEAN: list[float] = [0.485, 0.456, 0.406]
 _IMAGENET_STD: list[float] = [0.229, 0.224, 0.225]
@@ -100,9 +100,7 @@ class RFDETRAdapter:
 
         return nn_model
 
-    def preprocess(
-        self, sample: COCOSample, device: torch.device | None = None
-    ) -> torch.Tensor:
+    def preprocess(self, sample: COCOSample, device: torch.device | None = None) -> torch.Tensor:
         """Direct-resize + ImageNet-normalize to (1, 3, 704, 704) per D-RF-04.
 
         Vendor pipeline from rfdetr/detr.py:1180-1183:

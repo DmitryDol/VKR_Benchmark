@@ -129,7 +129,7 @@ class ResultLogger:
     def add(self, result: BenchmarkResult) -> None:
         """Add a result, inject hardware info, and immediately append to CSV."""
         if self._hardware is not None and not result.hw_gpu:
-            # inject hardware info if not already set (D-03)
+            # inject hardware info if not already set
             result.hw_gpu = self._hardware.gpu_name
             result.hw_cuda_version = self._hardware.cuda_version
             result.hw_driver_version = self._hardware.driver_version
@@ -185,9 +185,7 @@ class ResultLogger:
 
         # JSON — keep the full row including per_class_ap
         json_path = stage_dir / f"{result.stage}.json"
-        json_path.write_text(
-            json.dumps(row, indent=2, ensure_ascii=False), encoding="utf-8"
-        )
+        json_path.write_text(json.dumps(row, indent=2, ensure_ascii=False), encoding="utf-8")
 
         logger.info("Stage files written: %s, %s", csv_path, json_path)
         return csv_path, json_path
@@ -243,7 +241,7 @@ class ResultLogger:
                 map_float = float("nan")
             if math.isnan(map_float):
                 continue
-            # D-12: capture latency for the tie-break. Missing/non-numeric/NaN
+            # capture latency for the tie-break. Missing/non-numeric/NaN
             # latency falls back to +inf so it can never win a tie.
             lat_val = data.get("latency_total_ms")
             try:
@@ -265,7 +263,7 @@ class ResultLogger:
             logger.warning("No valid INT8 results found — int8_best_calibrator.json not written")
             return None
 
-        # D-12: rank by mAP descending, tie-break by latency ascending.
+        # rank by mAP descending, tie-break by latency ascending.
         # `min` with the negated mAP picks the highest-mAP candidate first;
         # on an exact mAP tie the lower latency wins.
         best = min(
@@ -349,9 +347,7 @@ class ResultLogger:
         if unified_csv.exists():
             with unified_csv.open(newline="", encoding="utf-8") as f:
                 reader = csv.DictReader(f)
-                existing_other = [
-                    r for r in reader if r.get("model_name") != model_name
-                ]
+                existing_other = [r for r in reader if r.get("model_name") != model_name]
 
         merged_rows: list[dict[str, object]] = [*existing_other, *all_rows]
 
@@ -400,19 +396,20 @@ class ResultLogger:
             if st == best_stage and best_stage:
                 st += " ★"
 
-            rows.append([
-                st,
-                _fmt_metric(r.get("map_50_95"), 3),
-                _fmt_metric(r.get("latency_total_ms"), 1),
-                _fmt_metric(r.get("throughput_fps"), 1),
-                _fmt_metric(r.get("accuracy_drop_pct"), 1),
-                _fmt_metric(r.get("model_size_mb"), 1),
-            ])
+            rows.append(
+                [
+                    st,
+                    _fmt_metric(r.get("map_50_95"), 3),
+                    _fmt_metric(r.get("latency_total_ms"), 1),
+                    _fmt_metric(r.get("throughput_fps"), 1),
+                    _fmt_metric(r.get("accuracy_drop_pct"), 1),
+                    _fmt_metric(r.get("model_size_mb"), 1),
+                ]
+            )
 
         # Write summary.txt
         col_widths = [
-            max(len(str(item)) for item in col)
-            for col in zip(headers, *rows, strict=False)
+            max(len(str(item)) for item in col) for col in zip(headers, *rows, strict=False)
         ]
         txt_lines = []
         txt_lines.append(" | ".join(h.ljust(w) for h, w in zip(headers, col_widths, strict=False)))

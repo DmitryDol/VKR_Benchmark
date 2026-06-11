@@ -47,7 +47,7 @@ random.seed(0)
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Configuration constants (locked in plan 13.04)
+# Configuration constants
 # ---------------------------------------------------------------------------
 
 MODELS_ORDER: tuple[str, ...] = ("rt-detr", "yolo11l", "yolo26l", "rfdetr-l")

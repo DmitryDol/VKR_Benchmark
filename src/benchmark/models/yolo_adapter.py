@@ -24,9 +24,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def _letterbox_params(
-    orig_h: int, orig_w: int, in_h: int, in_w: int
-) -> tuple[float, int, int]:
+def _letterbox_params(orig_h: int, orig_w: int, in_h: int, in_w: int) -> tuple[float, int, int]:
     """Compute YOLO letterbox scale and centered padding.
 
     Parameters
@@ -81,9 +79,7 @@ class YOLOAdapter:
         yolo.to(device)
         return yolo.model
 
-    def preprocess(
-        self, sample: COCOSample, device: torch.device | None = None
-    ) -> torch.Tensor:
+    def preprocess(self, sample: COCOSample, device: torch.device | None = None) -> torch.Tensor:
         """Letterbox-resize the COCO sample to the model input size.
 
         Implements Ultralytics' canonical letterbox: scale so the longest
@@ -196,7 +192,7 @@ class YOLOAdapter:
         in_h, in_w = input_size
         r, pad_top, pad_left = _letterbox_params(img_h, img_w, in_h, in_w)
 
-        # WR-10: clone the slice so subsequent reads of `results[:, 4]` /
+        # clone the slice so subsequent reads of `results[:, 4]` /
         # `results[:, 5]` are not corrupted by the in-place box rescale.
         # The NMS-free branch already uses `.copy()` for the numpy path;
         # mirror that defensiveness here for the torch path.
@@ -233,10 +229,7 @@ class YOLOAdapter:
         """
         # For NMS-free models (YOLOv10, YOLO26), output is often (1, 300, 6)
         # where each detection is [x1, y1, x2, y2, conf, cls]
-        if isinstance(raw_outputs, (list, tuple)):
-            preds = raw_outputs[0]
-        else:
-            preds = raw_outputs
+        preds = raw_outputs[0] if isinstance(raw_outputs, (list, tuple)) else raw_outputs
 
         is_numpy = isinstance(preds, np.ndarray)
 

@@ -25,7 +25,7 @@ import matplotlib.pyplot as plt
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Module-level constants (locked in 13-CONTEXT.md)
+# Module-level constants
 # ---------------------------------------------------------------------------
 
 IOU_THRESHOLD: float = 0.5
@@ -158,7 +158,9 @@ def build_confusion_80(  # noqa: PLR0912
 
         # Filter by confidence threshold and sort descending by score
         filtered_preds = [
-            p for p in raw_preds if float(p["score"]) >= CONFIDENCE_THRESHOLD  # type: ignore[arg-type]
+            p
+            for p in raw_preds
+            if float(p["score"]) >= CONFIDENCE_THRESHOLD  # type: ignore[arg-type]
         ]
         filtered_preds.sort(key=lambda p: float(p["score"]), reverse=True)  # type: ignore[arg-type]
 

@@ -33,11 +33,6 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _CAL_BATCH_SIZE: int = 8
-# WR-06: _INPUT_SIZE follows the project convention (height, width); PIL's
-# Image.resize() takes (width, height) — callers must pass the tuple reversed.
-# Today both dimensions are 640 so the swap is invisible, but a future
-# non-square value (e.g. (384, 640)) would silently mis-shape tensors without
-# this comment.
 _INPUT_SIZE: tuple[int, int] = (640, 640)  # (H, W)
 
 
@@ -74,7 +69,7 @@ def load_calibration_data(
     use_adapter = callable(adapter_pre)
 
     data: list[torch.Tensor] = []
-    # WR-06: _INPUT_SIZE is (H, W); PIL.resize() takes (W, H) — pass reversed.
+    # _INPUT_SIZE is (H, W); PIL.resize() takes (W, H) — pass reversed.
     target_h, target_w = _INPUT_SIZE
     for sample in dataloader:
         if use_adapter:
@@ -230,7 +225,7 @@ class PercentileCalibrator(_BASE_LEGACY):  # type: ignore[misc]
         self._cache_path = cache_path
         self._batch_idx: int = 0
         self._device_buf: torch.Tensor | None = None
-        # WR-07: pybind11 IInt8LegacyCalibrator — TRT calls get_quantile() /
+        # pybind11 IInt8LegacyCalibrator — TRT calls get_quantile() /
         # get_regression_cutoff() (overridden below). We use only the
         # underscored backing fields; the public `quantile`/`regression_cutoff`
         # attributes are ignored by the base class and were redundant.

@@ -24,10 +24,7 @@ logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Hardcoded image selection — covers 7 supercategory bins and all 3 qualitative
-# scenarios (dense=139, large_single=285, occluded=776) so the collage shares
-# images with media/qualitative/ for diploma narrative continuity.
-# Sorted ascending by image_id (defines left-to-right, top-to-bottom grid order).
-# Deterministically precomputed on 2026-05-19 against instances_val2017.json.
+# scenarios (dense=139, large_single=285, occluded=776)
 # ---------------------------------------------------------------------------
 SAMPLE_IMAGE_IDS: tuple[tuple[int, str], ...] = (
     (139, "furniture: chairs + dining table (qualitative: dense)"),
@@ -232,9 +229,7 @@ def _verify_sample_ids(coco_json: dict[str, object]) -> None:
         anns_by_image[img_id].append(ann)  # type: ignore[arg-type]
 
     def non_crowd_anns(image_id: int) -> list[dict[str, object]]:
-        return [
-            a for a in anns_by_image.get(image_id, []) if a.get("iscrowd", 0) == 0
-        ]
+        return [a for a in anns_by_image.get(image_id, []) if a.get("iscrowd", 0) == 0]
 
     def non_crowd_supercats(image_id: int) -> list[str]:
         return [
@@ -251,7 +246,8 @@ def _verify_sample_ids(coco_json: dict[str, object]) -> None:
     w_285, h_285 = image_sizes.get(285, (1, 1))
     area_285 = w_285 * h_285
     max_gt_area_285 = max(
-        (float(a["area"]) for a in large_anns_285), default=0.0  # type: ignore[arg-type]
+        (float(a["area"]) for a in large_anns_285),
+        default=0.0,  # type: ignore[arg-type]
     )
     assert max_gt_area_285 >= _LARGE_SINGLE_MIN_AREA_FRAC * area_285, (
         f"id=285: largest GT area {max_gt_area_285:.0f}"
@@ -277,9 +273,7 @@ def _verify_sample_ids(coco_json: dict[str, object]) -> None:
                 break
         if found_pair:
             break
-    assert found_pair, (
-        f"id=776: no GT pair with IoU >= {_OCCLUDED_MIN_IOU} found"
-    )
+    assert found_pair, f"id=776: no GT pair with IoU >= {_OCCLUDED_MIN_IOU} found"
 
     sc_872 = non_crowd_supercats(872)
     assert sc_872.count("sports") >= MIN_ANNOTATION_COUNT, (

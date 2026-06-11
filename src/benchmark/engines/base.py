@@ -342,5 +342,4 @@ class BaseEngine(ABC):
             per_class_ap=per_class_ap,
             warmup_runs=WARMUP_RUNS,
             measure_runs=MEASURE_RUNS,
-            # hw_* fields remain "" — ResultLogger.add() injects them (D-03)
         )

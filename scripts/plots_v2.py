@@ -62,7 +62,7 @@ logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# Configuration constants (shared with the v1 scripts)
+# Configuration constants
 # ---------------------------------------------------------------------------
 
 RFDETR_L_INVALID_STAGES: frozenset[str] = frozenset(

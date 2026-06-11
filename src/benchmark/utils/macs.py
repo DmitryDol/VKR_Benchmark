@@ -72,8 +72,7 @@ def compute_macs(
 
     # Unknown family — attempt calflops with warning
     logger.warning(
-        "compute_macs: unknown model family '%s' — attempting calflops, "
-        "results may be inaccurate",
+        "compute_macs: unknown model family '%s' — attempting calflops, results may be inaccurate",
         model_name,
     )
     return _compute_macs_calflops(model, model_name, input_shape)
@@ -87,8 +86,7 @@ def _compute_macs_calflops(
     """Compute MACs using calflops.calculate_flops()."""
     if not _CALFLOPS_AVAILABLE:
         logger.warning(
-            "calflops not installed — MACs will be 0.0 for %s. "
-            "Run: uv add calflops",
+            "calflops not installed — MACs will be 0.0 for %s. Run: uv add calflops",
             model_name,
         )
         return 0.0, 0.0
@@ -113,7 +111,7 @@ def _compute_macs_calflops(
         macs = float(macs_obj)
         flops = float(flops_obj)
 
-        # D-08: warn if any component reports 0 (unsupported ops, e.g.,
+        # warn if any component reports 0 (unsupported ops, e.g.,
         # MultiScaleDeformableAttention C++ extension in DETR variants)
         if macs == 0.0:
             logger.warning(

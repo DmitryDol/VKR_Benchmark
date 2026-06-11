@@ -1,15 +1,18 @@
 """
 Mixed precision strategies for TensorRT optimization.
 """
+
 import logging
 
 import tensorrt as trt
 
 logger = logging.getLogger(__name__)
 
+
 def is_constant_or_shape(layer: trt.ILayer) -> bool:
     """Check if a layer is CONSTANT or SHAPE."""
     return layer.type in (trt.LayerType.CONSTANT, trt.LayerType.SHAPE)
+
 
 def apply_strategy_a(network: trt.INetworkDefinition) -> int:
     """
@@ -47,6 +50,7 @@ def apply_strategy_a(network: trt.INetworkDefinition) -> int:
 
     return count
 
+
 def apply_strategy_b(network: trt.INetworkDefinition) -> int:
     """
     Strategy B: Apply FP16 to Softmax and Normalization (LayerNorm) nodes.
@@ -68,12 +72,14 @@ def apply_strategy_b(network: trt.INetworkDefinition) -> int:
         if is_constant_or_shape(layer):
             continue
 
-        # D-RF-03 B2: NORMALIZATION clause added to the type set so
+        # NORMALIZATION clause added to the type set so
         # INormalizationLayer (TRT 8.6+ native LayerNorm) is caught
         # name-agnostically alongside SOFTMAX. The substring fallback
         # still covers opset<17 decomposed-LayerNorm graphs.
-        if layer.type in {trt.LayerType.SOFTMAX, trt.LayerType.NORMALIZATION} \
-                or "norm" in layer.name.lower():
+        if (
+            layer.type in {trt.LayerType.SOFTMAX, trt.LayerType.NORMALIZATION}
+            or "norm" in layer.name.lower()
+        ):
             layer.precision = trt.float16
             layer.set_output_type(0, trt.float16)
             count += 1

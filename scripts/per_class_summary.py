@@ -29,7 +29,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Configuration constants (locked in plan 13.03)
+# Configuration constants
 # ---------------------------------------------------------------------------
 
 MODELS_ORDER: tuple[str, ...] = ("rt-detr", "yolo11l", "yolo26l", "rfdetr-l")
@@ -42,7 +42,7 @@ VARIANT_DIRS: dict[str, str] = {
 }
 
 # RF-DETR-L INT8/Mixed stages whose TRT auto-tuner rolled back to FP16 —
-# excluded from all Phase 13 artifacts; these columns are written as "n/a".
+# excluded from all artifacts; these columns are written as "n/a".
 RFDETR_L_INVALID_STAGES: frozenset[str] = frozenset(
     {
         "5_trt_int8_entropy",

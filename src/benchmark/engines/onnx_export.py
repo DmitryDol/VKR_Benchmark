@@ -252,7 +252,7 @@ def export_yolo_to_onnx(
     output_path.parent.mkdir(parents=True, exist_ok=True)
     sim_path = simplify_onnx(raw_onnx_path, output_path=output_path)
 
-    # T-07-02: validate the final simplified graph before handing to downstream stages.
+    # validate the final simplified graph before handing to downstream stages.
     validate_onnx(sim_path)
 
     logger.info("YOLO simplified ONNX ready: %s", sim_path)

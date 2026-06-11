@@ -17,7 +17,6 @@ import torch
 from PIL import Image
 
 from benchmark.engines.base import MEASURE_RUNS, WARMUP_RUNS, BaseEngine, Detection
-from benchmark.engines.pytorch_engine import ModelAdapter
 from benchmark.utils.logger import BenchmarkResult
 
 try:
@@ -29,6 +28,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from benchmark.data.coco_loader import COCODataLoader, COCOSample
+    from benchmark.engines.pytorch_engine import ModelAdapter
 
 logger = logging.getLogger(__name__)
 
@@ -123,7 +123,7 @@ class TensorRTEngine(BaseEngine):
         self._score_threshold = score_threshold
         self._mixed_strategy: Literal["a", "b"] | None = mixed_strategy
 
-        # T-07-03: sanitize model_name to alphanumeric/underscore only before using in
+        # sanitize model_name to alphanumeric/underscore only before using in
         # filenames, preventing path separator injection into engine_dir.
         # Dashes are replaced so rt-detr -> rt_detr (safe filesystem token).
         model_token: str = re.sub(r"[^A-Za-z0-9_]", "_", self.model_name)
@@ -138,15 +138,7 @@ class TensorRTEngine(BaseEngine):
                 )
             else:
                 self._engine_path = engine_dir / f"{model_token}_int8_{calibrator_method}.engine"
-            # CR-03: cache file path is namespaced per calibrator method
-            # (minmax/entropy/percentile). TRT cache tables produced by
-            # IInt8LegacyCalibrator (Percentile) are NOT interchangeable with
-            # IInt8EntropyCalibrator2 (Entropy/MinMax); the per-method file
-            # name guarantees cache isolation across algorithms. Stage 6
-            # mixed-precision rebuilds share the Stage 5 cache by design
-            # (D-07/D-08) — the engine filename differs by mixed_strategy
-            # while the cache filename omits mixed_strategy so a/b can reuse
-            # the same calibration table.
+
             self._cache_path: Path | None = (
                 engine_dir / f"{model_token}_int8_{calibrator_method}.cache"
             )
@@ -164,7 +156,7 @@ class TensorRTEngine(BaseEngine):
         self._input_shape: tuple[int, ...] = ()
         self._output_names: list[str] = []
         self._output_shapes: list[tuple[int, ...]] = []
-        # WR-09: pre-allocated persistent I/O buffers; populated by _load_engine
+        # pre-allocated persistent I/O buffers; populated by _load_engine
         # and reused on every infer() call to avoid 1000 CUDA allocs/run.
         self._input_buf: torch.Tensor | None = None
         self._output_bufs: list[torch.Tensor] = []
@@ -357,7 +349,7 @@ class TensorRTEngine(BaseEngine):
 
         # Включение FP16 как Fallback для INT8.
         # Позволяет не поддерживаемым в INT8 слоям (LayerNorm, Softmax)
-        # аппаратно ускоряться в FP16, а не скатываться в крайне медленный FP32.
+        # аппаратно ускоряться в FP16, а не скатываться в медленный FP32.
         config.set_flag(trt.BuilderFlag.INT8)  # type: ignore[union-attr]
         config.set_flag(trt.BuilderFlag.FP16)  # type: ignore[union-attr]
         config.int8_calibrator = calibrator  # type: ignore[union-attr]
@@ -419,20 +411,9 @@ class TensorRTEngine(BaseEngine):
             else:
                 self._output_names.append(name)
                 self._output_shapes.append(tuple(self._engine.get_tensor_shape(name)))
-                self._output_dtypes.append(
-                    _trt_dtype_to_torch(self._engine.get_tensor_dtype(name))
-                )
+                self._output_dtypes.append(_trt_dtype_to_torch(self._engine.get_tensor_dtype(name)))
 
-        # WR-09 + dtype fix: pre-allocate persistent I/O buffers once at load
-        # time using the engine's actual binding dtypes. Detection models emit
-        # mixed-dtype outputs (e.g. RT-DETR: boxes float32, labels int64;
-        # YOLO post-NMS: boxes/scores float32, class_ids int32). Hardcoding
-        # float32 reinterprets integer-typed buffers as floats and corrupts
-        # class labels → all-zero categories → collapsed mAP across every
-        # precision and model.
-        self._input_buf = torch.empty(
-            self._input_shape, dtype=self._input_dtype, device="cuda"
-        )
+        self._input_buf = torch.empty(self._input_shape, dtype=self._input_dtype, device="cuda")
         self._output_bufs = [
             torch.empty(s, dtype=dt, device="cuda")
             for s, dt in zip(self._output_shapes, self._output_dtypes, strict=True)
@@ -490,7 +471,7 @@ class TensorRTEngine(BaseEngine):
 
         inputs_np = np.ascontiguousarray(inputs, dtype=np.float32)  # type: ignore[arg-type]
 
-        # WR-12: serialize the H2D input copy on the SAME stream TRT executes
+        # serialize the H2D input copy on the SAME stream TRT executes
         # on. The previous code queued the async copy on the default stream
         # while TRT ran on self._stream; nothing synchronised the two and TRT
         # could start reading the input buffer before the upload finished,
@@ -530,6 +511,7 @@ class TensorRTEngine(BaseEngine):
             input_size=self._adapter.input_size,
             score_threshold=self._score_threshold,
         )
+
     @property
     def model_size_mb(self) -> float:
         """TRT engine file size in MB."""
@@ -668,7 +650,7 @@ def analyze_engine_precision(engine_path: Path) -> dict[str, int | float]:
             # Try the explicit Precision field first (if present).
             precision = layer.get("Precision", None)
             if not precision:
-                # WR-08: classify by ALL output datatypes, not just outputs[0].
+                # classify by ALL output datatypes, not just outputs[0].
                 # A multi-output layer can have mixed-precision outputs (e.g.
                 # Conv with INT8 main + FP32 bias). The previous code reported
                 # only outputs[0], over-counting INT8 for such graphs.

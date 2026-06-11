@@ -31,15 +31,6 @@ app = typer.Typer(
     add_completion=False,
 )
 
-# Phase 7 D-07 / D-08: the INT8 calibration set is fixed at 500 COCO val2017 images
-# and is the SAME 500 across all three calibrators (MinMax, Entropy, Percentile) and
-# across both Stage 5 and Stage 6 — the calibrator algorithm (or mixed-precision
-# strategy) must be the only variable. COCODataLoader is deterministic by
-# construction: `__post_init__` does `sorted(self._coco.getImgIds())[:limit]` (no
-# shuffle, no seed), so `COCODataLoader(limit=500)` returns the identical 500
-# image_ids in the identical order on every construction. This module-level
-# constant + helper centralizes that contract so Stages 5 and 6 share one
-# call-site (Plan 07-03, Task 1).
 _CALIBRATION_IMAGE_COUNT: int = 500
 
 
@@ -53,8 +44,8 @@ def _build_calibration_dataloader() -> COCODataLoader:
     """
     return COCODataLoader(limit=_CALIBRATION_IMAGE_COUNT)
 
+
 # CLI-01 / CLI-02 stage registry — ordered list for --all-stages
-# Stage 1 and 2 only in Phase 2; later phases append stages 3-6
 STAGE_REGISTRY: list[str] = [
     "1_pytorch_fp32",
     "2_onnx_fp32",
@@ -112,7 +103,6 @@ def _get_adapter(model_name: str) -> object:
         If model_name is not in MODEL_REGISTRY.
     """
     if model_name == "rt-detr":
-        # RTDETRAdapter lives in benchmark.models, added in a later phase
         try:
             from benchmark.models.rtdetr_adapter import RTDETRAdapter  # type: ignore[import-not-found]  # noqa: PLC0415 I001
         except ImportError as exc:
@@ -155,8 +145,6 @@ def _run_stage(  # noqa: PLR0912, PLR0915
         weights_path = Path(MODEL_REGISTRY[model_name]["weights"])
         engine.load_model(weights_path)
 
-        # D-09: compute MACs once at stage 1 — read input shape from adapter so
-        # non-640 models (e.g. RF-DETR @ 704x704) produce correct FLOPs.
         if macs is None:
             h, w = adapter.input_size  # type: ignore[union-attr]
             macs, flops = compute_macs(
@@ -250,7 +238,7 @@ def _run_stage(  # noqa: PLR0912, PLR0915
             msg = f"ONNX model missing: {onnx_path} — run stage 2 first"
             raise FileNotFoundError(msg)
 
-        # D-07/D-08: single shared 500-image calibration dataloader (see
+        # single shared 500-image calibration dataloader (see
         # _build_calibration_dataloader docstring). MUST be the identical call for
         # both Stage 5 and Stage 6 so the calibrator algorithm is the only variable.
         cal_dataloader = _build_calibration_dataloader()
@@ -297,7 +285,7 @@ def _run_stage(  # noqa: PLR0912, PLR0915
             logging.warning("int8_best_calibrator.json missing, fallback to entropy")
             calibrator = "entropy"
 
-        # D-07/D-08: same 500-image calibration set as Stage 5 (see helper docstring)
+        # same 500-image calibration set as Stage 5 (see helper docstring)
         cal_dataloader = _build_calibration_dataloader()
 
         engine = TensorRTEngine(
@@ -377,12 +365,9 @@ def run_benchmark(
     if all_stages and stage is not None:
         raise typer.BadParameter("Cannot use both --stage and --all-stages")
 
-    # T-02-05: resolve output_dir to avoid path traversal via shell expansion
     resolved_dir = Path(output_dir).resolve()
-    # T-03-06: resolve engine_dir to avoid path traversal
     engine_dir = engine_dir.resolve()
 
-    # D-03: collect hardware info once at startup
     hw = HardwareInfo.collect()
     result_logger = ResultLogger(output_dir=resolved_dir, hardware=hw, run_id=run_id)
     typer.echo(f"Run ID: {result_logger.run_id}")
@@ -390,7 +375,6 @@ def run_benchmark(
     if all_stages:
         stages_to_run: list[str] = STAGE_REGISTRY
     else:
-        # Support comma-separated stage IDs: --stage a,b,c
         parsed = [s.strip() for s in stage.split(",") if s.strip()]  # type: ignore[union-attr]
         unknown = [s for s in parsed if s not in STAGE_REGISTRY]
         if unknown:
@@ -419,7 +403,7 @@ def run_benchmark(
             # First stage sets the baseline for accuracy_drop_pct
             if s == "1_pytorch_fp32":
                 baseline_map = map_result
-            # After any INT8 stage, update best-calibrator summary (CAL-05)
+            # After any INT8 stage, update best-calibrator summary
             if s in ("5_trt_int8_minmax", "5_trt_int8_entropy", "5_trt_int8_percentile"):
                 result_logger.save_int8_best_calibrator(model)
         except Exception as exc:
@@ -445,7 +429,6 @@ def merge_results(
     """Merge per-stage CSVs into unified results files (CLI-03, D-06)."""
     _configure_logging()
 
-    # T-02-05: resolve to avoid path traversal
     resolved_dir = Path(output_dir).resolve()
 
     result_logger = ResultLogger(output_dir=resolved_dir, run_id=run_id)

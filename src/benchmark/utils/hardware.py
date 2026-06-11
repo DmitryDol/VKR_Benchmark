@@ -33,7 +33,7 @@ class HardwareInfo:
     gpu_name: str
     cuda_version: str
     driver_version: str
-    trt_version: str  # "" for non-TRT stages — never None (D-02)
+    trt_version: str  # "" for non-TRT stages — never None
 
     @classmethod
     def collect(cls) -> HardwareInfo:
@@ -49,9 +49,7 @@ class HardwareInfo:
             Populated hardware metadata instance.
         """
         # GPU name via torch
-        gpu_name = (
-            torch.cuda.get_device_name(0) if torch.cuda.is_available() else "CPU"
-        )
+        gpu_name = torch.cuda.get_device_name(0) if torch.cuda.is_available() else "CPU"
 
         # CUDA version via torch.version.cuda
         cuda_version: str = torch.version.cuda or ""  # type: ignore[attr-defined]

@@ -61,7 +61,6 @@ def main() -> int:
     logger.info("Using device: %s", device)
 
     # Step 0: Instantiate (downloads ~150 MB rf-detr-large-2026.pth on first run;
-    # subsequent runs hit the vendor local cache and start instantly — Landmine #6).
     logger.info(
         "Instantiating RFDETRLarge (vendor downloads weights on first call, ~150 MB;"
         " subsequent calls hit local cache)"
@@ -69,23 +68,12 @@ def main() -> int:
     m = RFDETRLarge()
 
     # Step 1: Vendor ONNX export at opset=18, shape=(704, 704).
-    # DESTRUCTIVE — see module docstring (Landmine #1).
-    # opset_version=18 EXPLICIT: vendor default is 17; project transformer convention
-    # is 18 per D-RF-02 and the existing RT-DETR precedent.
-    # shape=(704, 704) EXPLICIT: D-RF-04 -- vendor default but documenting the choice.
-    # DO NOT pass simplify= to vendor -- deprecated no-op since rfdetr==1.6 (C-10).
     raw_onnx = args.weights_dir / "inference_model.onnx"
     sim_onnx = args.weights_dir / "rfdetr_l_sim.onnx"
     logger.info("Exporting via vendor m.export() -> %s", raw_onnx)
     m.export(opset_version=18, shape=(704, 704), output_dir=str(args.weights_dir))
-    # DO NOT reuse `m` after this line -- the destructive forward_export swap
-    # has happened and the instance is no longer valid for training-mode forward
-    # passes (Landmine #1).
 
-    # Step 2: Mandatory project simplification (C-10).
-    # Runs even though vendor produces a reasonably clean graph -- the project's
-    # simplify_onnx() is the authoritative simplifier and the vendor's own
-    # `simplify` kwarg is a deprecated no-op since 1.6.
+    # Step 2: Mandatory project simplification
     logger.info("Applying project simplify_onnx() (C-10 -- mandatory)")
     simplify_onnx(raw_onnx, output_path=sim_onnx)
 

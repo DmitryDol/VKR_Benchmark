@@ -21,6 +21,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("export-yolo")
 
+
 def export_yolo_to_sim_onnx(weights_path: Path, output_path: Path) -> None:
     """Export YOLO model to ONNX using ultralytics and then simplify."""
     logger.info("=== Exporting %s ===", weights_path.name)
@@ -29,10 +30,6 @@ def export_yolo_to_sim_onnx(weights_path: Path, output_path: Path) -> None:
     model = YOLO(str(weights_path))
 
     # 2. Export to ONNX (unsimplified)
-    # ultralytics export saves to the same directory as weights by default
-    # but we want to control the location.
-    # Note: model.export returns the path to the exported file.
-    # We use opset 17 as per RESEARCH.md
     onnx_path_str = model.export(format="onnx", opset=17, simplify=False, imgsz=640)
     onnx_path = Path(onnx_path_str)
 
@@ -44,6 +41,7 @@ def export_yolo_to_sim_onnx(weights_path: Path, output_path: Path) -> None:
     if onnx_path != output_path and onnx_path.exists():
         onnx_path.unlink()
         logger.info("Removed temporary unsimplified ONNX: %s", onnx_path)
+
 
 def main() -> int:
     """Main export routine."""
@@ -66,6 +64,7 @@ def main() -> int:
             logger.error("Failed to export %s: %s", model_name, exc)
 
     return 0
+
 
 if __name__ == "__main__":
     sys.exit(main())
