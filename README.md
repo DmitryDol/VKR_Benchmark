@@ -5,13 +5,14 @@
 ![TensorRT](https://img.shields.io/badge/TensorRT-10.16-76B900?logo=nvidia&logoColor=white)
 ![uv](https://img.shields.io/badge/package%20manager-uv-DE5FE9)
 ![GPU](https://img.shields.io/badge/GPU-RTX%203070%20(8GB)-76B900?logo=nvidia&logoColor=white)
-![Status](https://img.shields.io/badge/status-v2.0%20(4%2F6%20моделей)-brightgreen)
+
 
 **VKR Benchmark** — это исследовательская система для **аппаратной оптимизации и бенчмаркинга инференса** детекторов объектов на базе трансформеров **без обучения с нуля**. Каждая модель проводится через **шестистадийный конвейер оптимизации** (PyTorch FP32 → ONNX → TensorRT TF32 → FP16/BF16 → INT8 → Mixed Precision), на **каждой** стадии фиксируется следующий набор метрик: latency, throughput, jitter, mAP, per-class AP, VRAM, размер модели, MACs/FLOPs. Результаты сохраняются в структурированные `.csv`/`.json`.
 
 ---
 
-Идея для дальнейших исследований: 
+Идея для дальнейших исследований:
+
 - Стратегии смешанной точности, восстанавливающие точность ближе к fp16 варианту
 - Успешное квантование RF-DETR до INT8 или Mixed Precision (для стратегий смешанной точности максимум удалось квантовать до int8 около 5% слоев, для int8 удалось 0%)
 
@@ -47,12 +48,12 @@
 
 ## Поддерживаемые модели
 
-| Модель              | Backbone        | Вход | Классы | Постпроцессинг |    Статус    |
-| ------------------------- | --------------- | :------: | :----------: | ---------------------------- | :----------------: |
-| **RT-DETR** (r50vd) | ResNet-50       | 640×640 |   COCO-80   | sigmoid + порог         |  ✅ Готова  |
-| **YOLO11l**         | YOLO11          | 640×640 |   COCO-80   | letterbox + NMS              |  ✅ Готова  |
-| **YOLO26l**         | YOLO26          | 640×640 |   COCO-80   | letterbox + NMS-free         |  ✅ Готова  |
-| **RF-DETR-L**       | DINOv2 + LWDETR | 704×704 |   COCO-91   | sigmoid + top-k              |  ✅ Готова*  |
+| Модель              | Backbone        | Вход | Классы | Постпроцессинг |   Статус   |
+| ------------------------- | --------------- | :------: | :----------: | ---------------------------- | :--------------: |
+| **RT-DETR** (r50vd) | ResNet-50       | 640×640 |   COCO-80   | sigmoid + порог         | ✅ Готова |
+| **YOLO11l**         | YOLO11          | 640×640 |   COCO-80   | letterbox + NMS              | ✅ Готова |
+| **YOLO26l**         | YOLO26          | 640×640 |   COCO-80   | letterbox + NMS-free         | ✅ Готова |
+| **RF-DETR-L**       | DINOv2 + LWDETR | 704×704 |   COCO-91   | sigmoid + top-k              | ✅ Готова* |
 
 \* RF-DETR проходит стадии 1–4; стадии INT8/Mixed (5–6) дают научно зафиксированный эффект «отката» авто-тюнера TensorRT к FP16 и исключены из дипломных артефактов — см. [docs/models.md](docs/models.md#rf-detr-l-и-эффект-отката-int8).
 
@@ -117,16 +118,16 @@ VKR_Claude/
 Полная документация находится в каталоге [`docs/`](docs/) (навигация — в
 [docs/README.md](docs/README.md)):
 
-| Документ | О чём |
-|----------|-------|
-| [docs/architecture.md](docs/architecture.md) | Архитектура: слои, паттерны (`BaseEngine`, `ModelAdapter`), поток данных |
-| [docs/pipeline.md](docs/pipeline.md) | Шесть стадий оптимизации, INT8-калибровка, Mixed Precision, инженерные правила |
-| [docs/models.md](docs/models.md) | Модели и адаптеры, маппинг классов, как добавить новую модель |
-| [docs/getting-started.md](docs/getting-started.md) | Установка, данные, веса, запуск бенчмарка, все флаги CLI |
-| [docs/metrics.md](docs/metrics.md) | Логируемые метрики, протокол замеров, схема `BenchmarkResult`, формат CSV/JSON |
-| [docs/results-and-artifacts.md](docs/results-and-artifacts.md) | Где лежат результаты и как их читать (Pareto, confusion, per-class AP) |
-| [docs/scripts.md](docs/scripts.md) | Справочник по всем скриптам в `scripts/` |
-| [docs/environment.md](docs/environment.md) | Целевое железо, версии, ограничения, инженерные инварианты |
+| Документ                                            | О чём                                                                                                                       |
+| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| [docs/architecture.md](docs/architecture.md)                   | Архитектура: слои, паттерны (`BaseEngine`, `ModelAdapter`), поток данных                  |
+| [docs/pipeline.md](docs/pipeline.md)                           | Шесть стадий оптимизации, INT8-калибровка, Mixed Precision, инженерные правила |
+| [docs/models.md](docs/models.md)                               | Модели и адаптеры, маппинг классов, как добавить новую модель                |
+| [docs/getting-started.md](docs/getting-started.md)             | Установка, данные, веса, запуск бенчмарка, все флаги CLI                              |
+| [docs/metrics.md](docs/metrics.md)                             | Логируемые метрики, протокол замеров, схема `BenchmarkResult`, формат CSV/JSON     |
+| [docs/results-and-artifacts.md](docs/results-and-artifacts.md) | Где лежат результаты и как их читать (Pareto, confusion, per-class AP)                            |
+| [docs/scripts.md](docs/scripts.md)                             | Справочник по всем скриптам в `scripts/`                                                             |
+| [docs/environment.md](docs/environment.md)                     | Целевое железо, версии, ограничения, инженерные инварианты                    |
 
 ---
 
