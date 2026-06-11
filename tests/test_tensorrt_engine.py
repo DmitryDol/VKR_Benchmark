@@ -115,11 +115,11 @@ def test_yolo_trt_build_workspace_and_precision_flags(
 
         engine._build_engine(onnx_path)
 
-        # D-06: strict 2 GB workspace
+        # strict 2 GB workspace
         mock_config.set_memory_pool_limit.assert_called_once_with(
             mock_trt.MemoryPoolType.WORKSPACE, 2 << 30
         )
-        # D-05: correct precision flag
+        # correct precision flag
         expected_flag = getattr(mock_trt.BuilderFlag, expected_flag_attr)
         mock_config.set_flag.assert_any_call(expected_flag)
 
@@ -178,7 +178,7 @@ def test_yolo_trt_build_bf16_non_ampere_raises(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# RF-DETR-L TensorRT build contract tests (Plan 08-03)
+# RF-DETR-L TensorRT build contract tests
 # ---------------------------------------------------------------------------
 
 

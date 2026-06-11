@@ -35,7 +35,7 @@ _CALIBRATION_IMAGE_COUNT: int = 500
 
 
 def _build_calibration_dataloader() -> COCODataLoader:
-    """Build the single canonical calibration dataloader (Plan 07-03, D-07/D-08).
+    """Build the single canonical calibration dataloader.
 
     Returns a :class:`COCODataLoader` limited to the first
     ``_CALIBRATION_IMAGE_COUNT`` image_ids in COCO's stable sorted order — the
@@ -45,7 +45,7 @@ def _build_calibration_dataloader() -> COCODataLoader:
     return COCODataLoader(limit=_CALIBRATION_IMAGE_COUNT)
 
 
-# CLI-01 / CLI-02 stage registry — ordered list for --all-stages
+# Stage registry — ordered list for --all-stages
 STAGE_REGISTRY: list[str] = [
     "1_pytorch_fp32",
     "2_onnx_fp32",
@@ -60,7 +60,7 @@ STAGE_REGISTRY: list[str] = [
 ]
 
 # Model registry — maps CLI name to weights directory and ONNX path
-# Extended in later phases when additional adapters are added
+# Extended when additional model adapters are added
 MODEL_REGISTRY: dict[str, dict[str, str]] = {
     "rt-detr": {
         "weights": "weights/rtdetr-r50vd/",
@@ -86,7 +86,7 @@ MODEL_REGISTRY: dict[str, dict[str, str]] = {
 
 
 def _configure_logging() -> None:
-    """Configure root logger at INFO level (D-16)."""
+    """Configure root logger at INFO level."""
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
@@ -193,7 +193,7 @@ def _run_stage(  # noqa: PLR0912, PLR0915
             dataloader,
             stage=stage,
             baseline_map_50_95=baseline_map,
-            macs=macs,  # reuse from stage 1 (D-09)
+            macs=macs,  # reuse from stage 1
             flops=flops,
         )
 
@@ -354,7 +354,7 @@ def run_benchmark(
         typer.Option("--engine-dir", help="Directory to cache TRT .engine files"),
     ] = Path("engines"),
 ) -> None:
-    """Run benchmark for a model (CLI-01 + CLI-02, D-13)."""
+    """Run benchmark for a model."""
     _configure_logging()
 
     if model not in MODEL_REGISTRY:
@@ -426,7 +426,7 @@ def merge_results(
         typer.Option("--run-id", help="Run ID to merge (required if multiple runs exist)"),
     ] = "",
 ) -> None:
-    """Merge per-stage CSVs into unified results files (CLI-03, D-06)."""
+    """Merge per-stage CSVs into unified results files."""
     _configure_logging()
 
     resolved_dir = Path(output_dir).resolve()

@@ -1,4 +1,4 @@
-"""Confusion-matrix builder and renderer for Phase 13 diploma artifacts.
+"""Confusion-matrix builder and renderer for diploma artifacts.
 
 Generates 80x80 (full COCO classes) and 12x12 (supercategory aggregate)
 confusion matrices from cached COCO-format predictions.

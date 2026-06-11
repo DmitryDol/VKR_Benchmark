@@ -1,4 +1,4 @@
-"""Phase 1 end-to-end runner: RT-DETR FP32 baseline + ONNX export.
+"""End-to-end runner: RT-DETR FP32 baseline + ONNX export.
 
 Usage:
     uv run python scripts/run_phase1.py
@@ -31,7 +31,7 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     datefmt="%H:%M:%S",
 )
-logger = logging.getLogger("phase1")
+logger = logging.getLogger("rtdetr-baseline")
 
 _ONNX_DYNAMIC_AXES: dict[str, dict[int, str]] = {
     "pixel_values": {0: "batch"},
@@ -42,7 +42,7 @@ _ONNX_DYNAMIC_AXES: dict[str, dict[int, str]] = {
 
 def parse_args() -> argparse.Namespace:
     """Parse CLI arguments."""
-    parser = argparse.ArgumentParser(description="Phase 1: RT-DETR FP32 benchmark")
+    parser = argparse.ArgumentParser(description="RT-DETR FP32 baseline benchmark")
     parser.add_argument(
         "--images-dir",
         type=Path,
@@ -89,7 +89,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> int:
-    """Run Phase 1 pipeline."""
+    """Run the RT-DETR FP32 baseline + ONNX export pipeline."""
     args = parse_args()
 
     if not torch.cuda.is_available() and args.device == "cuda":

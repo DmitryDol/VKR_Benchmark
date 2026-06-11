@@ -62,9 +62,9 @@ def apply_strategy_b(network: trt.INetworkDefinition) -> int:
       - 'norm' in layer.name.lower() (substring fallback for graphs where the
         opset < 17 decomposed LayerNorm or used a different naming scheme)
 
-    Phase 8 RF-DETR (D-RF-03 = B2): the explicit LayerType.NORMALIZATION clause
-    hardens the contract against future graphs whose node names don't contain
-    'norm'. Carries forward unchanged to Phase 10 (D-FINE, DEIMv2).
+    The explicit LayerType.NORMALIZATION clause hardens the predicate against
+    graphs whose node names don't contain 'norm' (e.g. transformer networks
+    such as RF-DETR, D-FINE, DEIMv2).
     """
     count = 0
     for i in range(network.num_layers):

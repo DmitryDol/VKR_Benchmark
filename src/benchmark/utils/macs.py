@@ -1,10 +1,10 @@
 """MACs/FLOPs computation for benchmarked models.
 
-Strategy (D-07):
+Two strategies are selected by model family:
   - DETR family (rt-detr, rf-detr, d-fine, deimv2): calflops.calculate_flops()
   - YOLO family (yolo11, yolo26): model.info() native Ultralytics method
 
-MACs computed once at stage 1 (PyTorch), reused for stages 2-6 (D-09).
+MACs are computed once at stage 1 (PyTorch) and reused for stages 2-6.
 """
 
 from __future__ import annotations
@@ -47,9 +47,9 @@ def compute_macs(
         given input_shape.
     model_name : str
         Lowercase model identifier (e.g. "rt-detr"). Used to select the
-        computation strategy (D-07).
+        computation strategy.
     input_shape : tuple[int, int, int, int]
-        (batch, channels, height, width) — always batch=1 per CLAUDE.md.
+        (batch, channels, height, width) — always batch=1 (real-time inference).
 
     Returns
     -------
@@ -60,8 +60,8 @@ def compute_macs(
     Notes
     -----
     If calflops reports 0 MACs for any sub-operation (e.g.,
-    MultiScaleDeformableAttention C++ extension), a warning is emitted
-    per D-08. The returned values may be underestimated in that case.
+    MultiScaleDeformableAttention C++ extension), a warning is emitted.
+    The returned values may be underestimated in that case.
     """
     normalized = model_name.lower()
 

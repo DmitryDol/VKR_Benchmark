@@ -1,4 +1,4 @@
-"""Postprocessing analytics for diploma artifacts (Phase 13)."""
+"""Postprocessing analytics for diploma artifacts."""
 
 from __future__ import annotations
 

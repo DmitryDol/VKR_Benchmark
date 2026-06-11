@@ -47,7 +47,7 @@ class BaseEngine(ABC):
         - postprocess(raw_outputs, sample): raw outputs → Detection
         - model_size_mb: property returning model file size in MB
 
-    Benchmarking protocol (per CLAUDE.md):
+    Benchmarking protocol:
         - 50 warm-up runs, then 1000 measured iterations
         - Latency split: preprocess + inference + postprocess
         - VRAM via torch.cuda.max_memory_allocated()
@@ -174,7 +174,7 @@ class BaseEngine(ABC):
         Returns
         -------
         dict[str, float | list[dict[str, int | float | str]]]
-            The existing 12 COCOeval stats (D-11) plus one new key
+            The existing 12 COCOeval stats plus one new key
             ``"per_class_ap"`` (list of 80 per-class entries).  The 12-key
             contract is fully preserved; callers that only read the scalar keys
             are unaffected.
@@ -234,7 +234,7 @@ class BaseEngine(ABC):
 
         stats = coco_eval.stats
         return {
-            "map_50_95": float(stats[0]),  # AP @ IoU=0.50:0.95  (D-11)
+            "map_50_95": float(stats[0]),  # AP @ IoU=0.50:0.95
             "map_50": float(stats[1]),  # AP @ IoU=0.50
             "map_75": float(stats[2]),  # AP @ IoU=0.75
             "map_small": float(stats[3]),  # AP, area=small
@@ -278,11 +278,11 @@ class BaseEngine(ABC):
         dataloader : COCODataLoader
             Data loader with COCO val2017 images.
         stage : str
-            Stage identifier string (D-04), e.g. "1_pytorch_fp32".
+            Stage identifier string, e.g. "1_pytorch_fp32".
         baseline_map_50_95 : float
             FP32 baseline mAP for accuracy drop calculation.
         macs : float | None
-            Pre-computed MACs (computed once at stage 1, D-09). None if unknown.
+            Pre-computed MACs (computed once at stage 1). None if unknown.
         flops : float | None
             Pre-computed FLOPs. None if unknown.
         cache_predictions : bool

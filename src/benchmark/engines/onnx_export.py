@@ -202,9 +202,9 @@ def export_yolo_to_onnx(
 
     Uses the ultralytics ``YOLO.export()`` method (which handles YOLO-specific
     graph quirks reliably) with ``simplify=False``, then runs the project's own
-    ``simplify_onnx()`` step for consistent graph optimization across all models
-    (D-01).  Batch size is fixed at 1 (``dynamic=False``); opset 17 is used per
-    D-02.
+    ``simplify_onnx()`` step for consistent graph optimization across all
+    models.  Batch size is fixed at 1 (``dynamic=False``); opset 17 is the
+    default.
 
     Parameters
     ----------
@@ -213,7 +213,7 @@ def export_yolo_to_onnx(
     output_path : Path
         Destination path for the simplified ``_sim.onnx`` file.
     opset_version : int
-        ONNX opset version (default 17, per D-02).
+        ONNX opset version (default 17).
 
     Returns
     -------
@@ -232,8 +232,8 @@ def export_yolo_to_onnx(
     yolo = YOLO(str(weights_path))
 
     # ultralytics .export() returns the path to the raw ONNX file as a string.
-    # simplify=False — the project runs its own onnxsim step below (D-01).
-    # dynamic=False — batch=1 fixed; no dynamic axes needed for TRT (D-02).
+    # simplify=False — the project runs its own onnxsim step below.
+    # dynamic=False — batch=1 fixed; no dynamic axes needed for TRT.
     raw_onnx_str: str | None = yolo.export(
         format="onnx",
         simplify=False,
@@ -248,7 +248,7 @@ def export_yolo_to_onnx(
     raw_onnx_path = Path(raw_onnx_str)
     logger.info("ultralytics ONNX export complete: %s", raw_onnx_path)
 
-    # Project onnxsim step — consistent graph optimization for all models (D-01).
+    # onnxsim step — consistent graph optimization for all models.
     output_path.parent.mkdir(parents=True, exist_ok=True)
     sim_path = simplify_onnx(raw_onnx_path, output_path=output_path)
 

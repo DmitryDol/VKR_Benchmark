@@ -1,4 +1,4 @@
-"""Phase 6 YOLO runner: Stage 1 (FP32 baseline) benchmarks for YOLO family.
+"""YOLO runner: Stage 1 (FP32 baseline) benchmarks for the YOLO family.
 
 Usage:
     uv run python scripts/run_yolo_phase.py
@@ -25,12 +25,12 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     datefmt="%H:%M:%S",
 )
-logger = logging.getLogger("phase6-yolo")
+logger = logging.getLogger("yolo-baseline")
 
 
 def parse_args() -> argparse.Namespace:
     """Parse CLI arguments."""
-    parser = argparse.ArgumentParser(description="Phase 6 YOLO Stage 1 Benchmarks")
+    parser = argparse.ArgumentParser(description="YOLO Stage 1 Benchmarks")
     parser.add_argument(
         "--images-dir",
         type=Path,
@@ -126,7 +126,7 @@ def run_yolo_benchmark(
 
 
 def main() -> int:
-    """Run Phase 6 YOLO baseline pipeline."""
+    """Run the YOLO baseline pipeline."""
     args = parse_args()
 
     if not torch.cuda.is_available() and args.device == "cuda":

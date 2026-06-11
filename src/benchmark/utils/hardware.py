@@ -27,7 +27,7 @@ class HardwareInfo:
         nvidia-smi is unavailable.
     trt_version : str
         TensorRT package version, e.g. "10.16.1.11". Empty string if
-        TensorRT is not installed (stages 1-2, per D-02).
+        TensorRT is not installed (non-TRT stages).
     """
 
     gpu_name: str
@@ -40,8 +40,8 @@ class HardwareInfo:
         """Query GPU, CUDA, driver, and TRT versions from the system.
 
         Calls nvidia-smi via subprocess with a fixed argument list
-        (no shell=True, no user input — T-02-01 mitigation).
-        TRT version falls back to "" if package not installed (D-02).
+        (no shell=True, no user input).
+        TRT version falls back to "" if the package is not installed.
 
         Returns
         -------
@@ -57,7 +57,7 @@ class HardwareInfo:
         # Driver version via nvidia-smi (fixed arg list — no shell injection)
         driver_version = cls._query_driver_version()
 
-        # TRT version via importlib.metadata — "" if not installed (D-02)
+        # TRT version via importlib.metadata — "" if not installed
         trt_version = cls._query_trt_version()
 
         info = cls(
@@ -79,13 +79,12 @@ class HardwareInfo:
     def _query_driver_version() -> str:
         """Query NVIDIA driver version via nvidia-smi.
 
-        Uses a fixed argument list (T-02-01 mitigation: no shell=True,
-        no user-controlled args).
+        Uses a fixed argument list (no shell=True, no user-controlled args).
 
         Returns empty string if nvidia-smi is unavailable or errors.
         """
         try:
-            cmd = [  # fixed list, no user input — T-02-01 mitigation
+            cmd = [  # fixed list, no user input
                 "nvidia-smi",
                 "--query-gpu=driver_version",
                 "--format=csv,noheader,nounits",

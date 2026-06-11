@@ -16,9 +16,9 @@ figures, each saved as a 300-dpi PNG, a vector PDF, and a grayscale PNG copy:
 ``precision_sweep_combined`` -- two side-by-side panels (mAP, latency) with all four
                                models, model coded by line style + end label; each
                                model's optimum precision ringed on the mAP panel.
-                               MAIN deliverable for the committee.
+                               This is the main combined figure.
 
-Design goals (see media/pareto/instrukcii_dlya_claude_code.md):
+Design goals:
 
 * Black-and-white robustness via redundant encoding. The model palette has
   monotonically increasing luminance (verified at runtime), markers carry a black

@@ -55,7 +55,7 @@ def test_benchmark_result_has_all_new_fields() -> None:
 
 
 def test_benchmark_result_hw_trt_version_default_empty_string() -> None:
-    """hw_trt_version must default to '' (not None) per D-02."""
+    """hw_trt_version must default to '' (not None)."""
     result = _make_result()
     assert result.hw_trt_version == ""
     assert result.hw_trt_version is not None
@@ -108,7 +108,7 @@ def test_merge_to_unified_combines_stage_files(tmp_path: Path) -> None:
 
 
 def test_result_logger_injects_hardware_info(tmp_path: Path) -> None:
-    """ResultLogger.add() must inject hw_* fields from HardwareInfo (D-03)."""
+    """ResultLogger.add() must inject hw_* fields from HardwareInfo."""
     from benchmark.utils.hardware import HardwareInfo
 
     hw = HardwareInfo(
@@ -124,11 +124,11 @@ def test_result_logger_injects_hardware_info(tmp_path: Path) -> None:
     log.add(result)
     assert result.hw_gpu == "Test GPU"
     assert result.hw_cuda_version == "12.1"
-    assert result.hw_trt_version == ""  # stays "" for stage 1 per D-02
+    assert result.hw_trt_version == ""  # stays "" for stage 1
 
 
 def test_stage_file_contains_hw_fields_after_add(tmp_path: Path) -> None:
-    """SC-5: stage JSON written after add() must contain non-empty hw_gpu (D-03 + D-05)."""
+    """Stage JSON written after add() must contain non-empty hw_gpu."""
     from benchmark.utils.hardware import HardwareInfo
 
     hw = HardwareInfo(
@@ -147,11 +147,11 @@ def test_stage_file_contains_hw_fields_after_add(tmp_path: Path) -> None:
     data = json.loads(json_path.read_text())
     assert data["hw_gpu"] == "NVIDIA GeForce RTX 3070", "hw_gpu must be in stage JSON"
     assert data["hw_cuda_version"] == "13.0"
-    assert data["hw_trt_version"] == ""  # D-02: "" for stage 1, not None
+    assert data["hw_trt_version"] == ""  # "" for stage 1, not None
 
 
 def test_json_stage_file_has_correct_stage_value(tmp_path: Path) -> None:
-    """Stage JSON must have stage == stage name (D-04)."""
+    """Stage JSON must have stage == stage name."""
     log = ResultLogger(output_dir=tmp_path)
     result = _make_result("2_onnx_fp32")
     _, json_path = log.save_stage_files(result)
@@ -173,7 +173,7 @@ def _write_int8_stage_json(
 
 
 def test_save_int8_best_calibrator_tie_breaks_by_latency(tmp_path: Path) -> None:
-    """D-12: when two calibrators share the highest mAP, the lower
+    """When two calibrators share the highest mAP, the lower
     latency_total_ms wins.
     """
     log = ResultLogger(output_dir=tmp_path, run_id="t")
@@ -192,7 +192,7 @@ def test_save_int8_best_calibrator_tie_breaks_by_latency(tmp_path: Path) -> None
     data = json.loads(out_path.read_text())
 
     assert data["best_calibrator"] == "entropy", (
-        "D-12: lower latency must win on an exact mAP tie"
+        "lower latency must win on an exact mAP tie"
     )
     assert data["best_stage"] == "5_trt_int8_entropy"
     # Verify all_candidates carries latency_total_ms for downstream auditability.

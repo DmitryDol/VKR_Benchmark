@@ -35,7 +35,7 @@ class ConcreteEngine(BaseEngine):
 
 
 def test_warmup_calls_infer_exactly_once_per_iteration(dummy_sample):
-    """FIX-01: warm-up loop must call infer() exactly once per iteration."""
+    """Warm-up loop must call infer() exactly once per iteration."""
     engine = ConcreteEngine("test", "pytorch", "fp32")
 
     infer_call_count = 0
@@ -93,5 +93,5 @@ def test_warmup_calls_infer_exactly_once_per_iteration(dummy_sample):
 
     assert infer_call_count == WARMUP_RUNS, (
         f"Expected {WARMUP_RUNS} infer() calls during warm-up, got {infer_call_count}. "
-        "FIX-01: warm-up loop calls infer() twice per iteration."
+        "warm-up loop calls infer() twice per iteration."
     )

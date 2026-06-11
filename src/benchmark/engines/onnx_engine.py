@@ -68,7 +68,7 @@ class OnnxRuntimeEngine(BaseEngine):
     """ONNX Runtime GPU inference engine (stage 2: ONNX FP32).
 
     Uses the CUDA ExecutionProvider when available, falls back to CPU
-    with a warning per T-02-06.
+    with a warning.
 
     Parameters
     ----------
@@ -104,8 +104,8 @@ class OnnxRuntimeEngine(BaseEngine):
         onnx_path passed at construction. The parameter is kept to
         satisfy the BaseEngine abstract method contract.
 
-        T-02-06 mitigation: check available providers; fall back to CPU
-        with a logged warning if CUDA EP is unavailable.
+        Checks the available providers and falls back to CPU with a logged
+        warning if the CUDA EP is unavailable.
         """
         _register_cuda_dll_dirs()
         available = ort.get_available_providers()

@@ -43,7 +43,7 @@ def adapter() -> RFDETRAdapter:
 
 
 def test_input_size_returns_704(adapter: RFDETRAdapter) -> None:
-    """adapter.input_size must return (704, 704) per D-RF-04."""
+    """adapter.input_size must return (704, 704)."""
     assert adapter.input_size == (_INPUT_H, _INPUT_W)
 
 

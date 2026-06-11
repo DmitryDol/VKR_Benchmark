@@ -128,7 +128,7 @@ def test_empty_outputs(nms_adapter: YOLOAdapter) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Letterbox preprocessing tests (paper-vs-measured mAP gap fix, plan 07-01)
+# Letterbox preprocessing tests (paper-vs-measured mAP gap fix)
 # ---------------------------------------------------------------------------
 
 

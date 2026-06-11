@@ -1,4 +1,4 @@
-"""Phase 2 end-to-end smoke test.
+"""End-to-end smoke test for stages 1 and 2.
 
 Runs stage 1 (PyTorch FP32) and stage 2 (ONNX FP32) with limit=10 images
 and verifies output files are created with the correct schema.
@@ -62,7 +62,7 @@ REQUIRED_CSV_FIELDS = {
 
 
 def main() -> None:
-    """Run Phase 2 smoke test: stages 1 and 2 with limit=10 images."""
+    """Run the smoke test: stages 1 and 2 with limit=10 images."""
     output_dir = Path("results")
     hw = HardwareInfo.collect()
     result_logger = ResultLogger(output_dir=output_dir, hardware=hw)
@@ -80,10 +80,10 @@ def main() -> None:
     engine.reset_vram_tracking()
     engine.load_model(Path("weights/rtdetr-r50vd/"))
 
-    # Run benchmark BEFORE computing MACs to avoid potential state side-effects (FIX-01)
+    # Run benchmark BEFORE computing MACs to avoid potential state side-effects
     result1 = engine.run_full_benchmark(dataloader, baseline_map_50_95=0.0)
 
-    # Compute MACs after benchmark (D-09, matching Phase 1 pattern)
+    # Compute MACs after the benchmark (reused across later stages)
     macs, flops = compute_macs(engine.model, "rt-detr")
     result1.macs = macs
     result1.flops = flops
@@ -132,7 +132,7 @@ def main() -> None:
     print("=== Merge ===")
     unified_csv, unified_json = result_logger.merge_to_unified("rt-detr")
     print(f"Unified: {unified_csv}, {unified_json}")
-    print("Phase 2 smoke test: ALL PASS")
+    print("Smoke test: ALL PASS")
 
 
 if __name__ == "__main__":

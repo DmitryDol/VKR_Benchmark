@@ -56,7 +56,7 @@ random.seed(0)
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Configuration constants (locked in plan 13.01)
+# Configuration constants
 # ---------------------------------------------------------------------------
 
 VARIANT_DIRS: dict[str, str] = {
@@ -67,7 +67,7 @@ VARIANT_DIRS: dict[str, str] = {
 }
 
 # RF-DETR-L INT8/Mixed stages whose TRT auto-tuner rolled back to FP16 —
-# excluded from all Phase 13 artifacts.
+# excluded from all diploma artifacts.
 RFDETR_L_INVALID_STAGES: frozenset[str] = frozenset(
     {
         "5_trt_int8_entropy",

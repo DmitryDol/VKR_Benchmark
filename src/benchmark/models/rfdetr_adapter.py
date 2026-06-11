@@ -101,7 +101,7 @@ class RFDETRAdapter:
         return nn_model
 
     def preprocess(self, sample: COCOSample, device: torch.device | None = None) -> torch.Tensor:
-        """Direct-resize + ImageNet-normalize to (1, 3, 704, 704) per D-RF-04.
+        """Direct-resize + ImageNet-normalize to (1, 3, 704, 704).
 
         Vendor pipeline from rfdetr/detr.py:1180-1183:
         - ``F.to_tensor``: HWC RGB uint8 -> CHW float32 / 255 -> [0, 1]
@@ -149,8 +149,8 @@ class RFDETRAdapter:
         Notes
         -----
         Uses POSITIONAL argument, NOT ``model(pixel_values=inputs)`` as in HF
-        RT-DETR. RF-DETR's LWDETR uses positional single-tensor input (RESEARCH
-        line 268; detr.py:1217).
+        RT-DETR. RF-DETR's LWDETR uses positional single-tensor input
+        (vendor detr.py:1217).
         """
         return model(inputs)
 

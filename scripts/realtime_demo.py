@@ -8,7 +8,7 @@ Three required runs (resolved at startup from existing result JSONs):
 Output: media/video/<model>_<stage>.mp4 at 30 FPS, source resolution.
 
 Per-frame overlay:
-  - Bounding boxes (threshold 0.25, same style as qualitative_examples.py P04).
+  - Bounding boxes (threshold 0.25, same style as qualitative_examples.py).
   - Top-right: rolling 30-frame FPS counter.
   - Bottom-left: "<model> / <stage>" label.
 
@@ -397,7 +397,7 @@ def _draw_detections(
     det: object,
     class_names: dict[int, str],
 ) -> None:
-    """Draw detection boxes on frame_bgr in-place (P04 style).
+    """Draw detection boxes on frame_bgr in-place.
 
     Parameters
     ----------
@@ -641,14 +641,13 @@ def main(
       <fastest_yolo>_<best_mixed>.mp4 -- fastest YOLO Mixed stage
 
     If data/demo.mp4 is absent, the script exits 2 with a clear message.
-    The script is the deliverable; MP4 output is deferred until the user
-    supplies data/demo.mp4 (Phase 13 P06 scope note).
+    Provide a short input MP4 at data/demo.mp4 to produce the annotated output.
     """
     if not input_video.exists():
         logger.error(
-            "Input video not found at %s. Phase 13 P06 is deferred until the user "
-            "provides data/demo.mp4. To proceed, place a short MP4 (<=30 s recommended) "
-            "at that path and re-run this script.",
+            "Input video not found at %s. Provide data/demo.mp4 to proceed: "
+            "place a short MP4 (<=30 s recommended) at that path and re-run "
+            "this script.",
             input_video,
         )
         raise typer.Exit(code=2)

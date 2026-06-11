@@ -25,7 +25,7 @@ def test_collect_returns_hardware_info() -> None:
 
 
 def test_trt_version_empty_when_not_installed() -> None:
-    """hw_trt_version must be '' (not None) when TRT is not installed (D-02)."""
+    """hw_trt_version must be '' (not None) when TRT is not installed."""
     import importlib.metadata
 
     with patch(
@@ -45,7 +45,7 @@ def test_driver_version_empty_on_subprocess_failure() -> None:
 
 
 def test_driver_version_uses_fixed_arg_list() -> None:
-    """nvidia-smi call must use a fixed arg list, not shell=True (T-02-01)."""
+    """nvidia-smi call must use a fixed arg list, not shell=True."""
     mock_result = MagicMock()
     mock_result.returncode = 0
     mock_result.stdout = "537.13\n"

@@ -20,9 +20,9 @@ logger = logging.getLogger(__name__)
 def _fmt_metric(val: object, dec: int) -> str:
     """Format a numeric metric for the summary table, handling NaN and non-numerics.
 
-    Used by :meth:`ResultLogger.merge_to_unified`. Lifted out of the per-row
-    loop (WR-04) so the helper is created once. Uses ``math.isnan`` for the
-    NaN check (WR-05) instead of the ``f != f`` self-comparison idiom.
+    Used by :meth:`ResultLogger.merge_to_unified`. Defined at module scope so
+    the helper is created once rather than per row. Uses ``math.isnan`` for the
+    NaN check instead of the ``f != f`` self-comparison idiom.
 
     Parameters
     ----------
@@ -52,7 +52,7 @@ class BenchmarkResult:
 
     # Identity
     model_name: str
-    stage: str  # e.g. "1_pytorch_fp32" (D-04)
+    stage: str  # e.g. "1_pytorch_fp32"
     engine_type: str  # "pytorch" | "onnx" | "tensorrt"
     precision: str  # "fp32" | "fp16" | "bf16" | "int8"
 
@@ -66,7 +66,7 @@ class BenchmarkResult:
     throughput_fps: float
     jitter_ms: float
 
-    # Accuracy — all 12 COCOeval stats (D-10/D-11)
+    # Accuracy — all 12 COCOeval stats
     map_50_95: float  # AP @ IoU=0.50:0.95  (stats[0])
     map_50: float  # AP @ IoU=0.50        (stats[1])
     map_75: float  # AP @ IoU=0.75        (stats[2])
@@ -89,14 +89,14 @@ class BenchmarkResult:
     macs: float | None = None
     flops: float | None = None
 
-    # Per-class AP (Phase 13) — JSON only; excluded from CSV writes
+    # Per-class AP — JSON only; excluded from CSV writes
     per_class_ap: list[dict[str, int | float | str]] = field(default_factory=list)
 
-    # Hardware info (D-01) — flat columns, pandas-friendly
+    # Hardware info — flat columns, pandas-friendly
     hw_gpu: str = ""
     hw_cuda_version: str = ""
     hw_driver_version: str = ""
-    hw_trt_version: str = ""  # "" for stages 1-2 (D-02)
+    hw_trt_version: str = ""  # "" for non-TRT stages
 
     # Meta
     timestamp: str = ""
@@ -153,7 +153,7 @@ class ResultLogger:
         return path
 
     def save_stage_files(self, result: BenchmarkResult) -> tuple[Path, Path]:
-        """Write per-stage CSV and JSON for a single result (D-05).
+        """Write per-stage CSV and JSON for a single result.
 
         Files are written to:
             results/{model_name}/{run_id}/{stage}.csv
@@ -198,7 +198,7 @@ class ResultLogger:
 
         Reads ``{run_id}/{stage}.json`` for minmax, entropy, and percentile.
         Picks the calibrator with the highest ``map_50_95``, tie-broken by the
-        lower ``latency_total_ms`` (Phase 7 D-12). NaN / missing stages are
+        lower ``latency_total_ms``. NaN / missing stages are
         skipped; a missing/non-numeric latency falls back to ``+inf`` so it
         can never win a tie. Writes the result to::
 
@@ -289,7 +289,7 @@ class ResultLogger:
         return out_path
 
     def merge_to_unified(self, model_name: str) -> tuple[Path, Path]:  # noqa: PLR0912, PLR0915
-        """Merge all per-stage CSVs for model_name into unified files (D-06).
+        """Merge all per-stage CSVs for model_name into unified files.
 
         Reads: results/{model_name}/{run_id}/*.csv (sorted by filename = stage order)
         Writes:

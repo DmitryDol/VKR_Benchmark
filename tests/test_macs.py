@@ -36,7 +36,7 @@ def test_compute_macs_returns_tuple_of_floats() -> None:
 
 
 def test_calflops_zero_macs_emits_warning(caplog: pytest.LogCaptureFixture) -> None:
-    """If calflops returns 0 MACs, production code must log the D-08 warning."""
+    """If calflops returns 0 MACs, production code must log the warning."""
     mock_model = _mock_model()
 
     # Mock calculate_flops to return (0.0, 0.0, ...) — simulates unsupported ops
@@ -47,13 +47,13 @@ def test_calflops_zero_macs_emits_warning(caplog: pytest.LogCaptureFixture) -> N
         patch("benchmark.utils.macs._CALFLOPS_AVAILABLE", True),
         caplog.at_level("WARNING", logger="benchmark.utils.macs"),
     ):
-        # Call the real production function — it must emit the D-08 warning
+        # Call the real production function — it must emit the warning
         from benchmark.utils.macs import _compute_macs_calflops
 
         _compute_macs_calflops(mock_model, "rt-detr", (1, 3, 640, 640))
 
     assert any("unsupported ops" in r.message for r in caplog.records), (
-        "D-08: warning must be emitted by production code when calflops returns 0 MACs"
+        "warning must be emitted by production code when calflops returns 0 MACs"
     )
 
 

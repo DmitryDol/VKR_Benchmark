@@ -1,4 +1,4 @@
-"""Per-class COCO AP postprocessor for Phase 13 diploma artifacts."""
+"""Per-class COCO AP postprocessor for diploma artifacts."""
 
 from __future__ import annotations
 

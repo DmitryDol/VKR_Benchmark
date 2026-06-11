@@ -1,4 +1,4 @@
-"""Export YOLO models to simplified ONNX for Phase 7.
+"""Export YOLO models to simplified ONNX.
 
 Usage:
     uv run python scripts/export_yolo_onnx.py

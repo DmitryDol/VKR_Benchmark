@@ -54,7 +54,7 @@ RFDETR_L_INVALID_STAGES: frozenset[str] = frozenset(
 )
 
 # Column → stage mapping (ordered).  Column order defines output column order.
-# ONNX FP32 (2_onnx_fp32) is intentionally omitted — per CONTEXT.md decision.
+# ONNX FP32 (2_onnx_fp32) is intentionally omitted from the summary table.
 COLUMN_TO_STAGE: tuple[tuple[str, str], ...] = (
     ("AP_FP32", "1_pytorch_fp32"),
     ("AP_TF32", "3_trt_tf32"),

@@ -1,8 +1,8 @@
 """Tests for the shared Stage 5 / Stage 6 calibration set and calibrator factory.
 
-Pins Phase 7 Plan 03 contracts:
+Contracts:
 
-* D-07/D-08: the calibration set is a single, fixed, deterministic 500-image
+* The calibration set is a single, fixed, deterministic 500-image
   selection — same images across MinMax / Entropy / Percentile and across both
   Stage 5 and Stage 6. ``COCODataLoader`` is deterministic by construction
   (``sorted(getImgIds())[:limit]``), so two builds of the calibration dataloader
@@ -46,7 +46,7 @@ _EXPECTED_PREPROCESS_CALLS = 2
 
 @requires_coco
 def test_calibration_set_is_fixed_across_calls() -> None:
-    """D-07/D-08: two builds of the calibration dataloader must yield the
+    """Two builds of the calibration dataloader must yield the
     same image_id sequence in the same order — proves the calibrator algorithm
     is the only variable across runs of Stage 5 / Stage 6.
     """

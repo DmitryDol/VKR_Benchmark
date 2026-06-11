@@ -262,11 +262,11 @@ class TensorRTEngine(BaseEngine):
         elif self.precision == "fp16":
             config.set_flag(trt.BuilderFlag.FP16)
         elif self.precision == "bf16":
-            # BF16 hardware check via TRT Builder API (TRT-native Ampere indicator).
-            # builder.platform_has_tf32 is present in TRT 10.16.1.11 and indicates
-            # Ampere (sm_80+) support — used as the BF16 capability gate per D-07
-            # and CLAUDE.md BF16 Verification rule.
-            # trt.BuilderFlag.BF16 exists in TRT 10.x (introduced TRT 8.6+).
+            # BF16 hardware check via TRT Builder API. There is no dedicated
+            # platform_has_bf16 attribute in TRT 10.x; platform_has_tf32 is
+            # present and indicates Ampere (sm_80+) support, which is used here
+            # as the BF16 capability gate. trt.BuilderFlag.BF16 exists in
+            # TRT 10.x (introduced in TRT 8.6+).
             if not builder.platform_has_tf32:
                 msg = "BF16 not supported: platform_has_tf32=False (Ampere sm_80+ required)"
                 raise _BF16UnsupportedError(msg)
@@ -471,18 +471,18 @@ class TensorRTEngine(BaseEngine):
 
         inputs_np = np.ascontiguousarray(inputs, dtype=np.float32)  # type: ignore[arg-type]
 
-        # serialize the H2D input copy on the SAME stream TRT executes
-        # on. The previous code queued the async copy on the default stream
-        # while TRT ran on self._stream; nothing synchronised the two and TRT
-        # could start reading the input buffer before the upload finished,
-        # producing partial/stale input → silent global mAP collapse on every
-        # TRT stage and model. The stream context makes the copy and execute
-        # run in stream order, preserving WR-09's allocator-churn benefit.
+        # Serialize the H2D input copy on the SAME stream TRT executes on.
+        # If the async copy were queued on the default stream while TRT runs
+        # on self._stream, nothing would synchronise the two and TRT could
+        # start reading the input buffer before the upload finished, producing
+        # partial/stale input. Running the copy inside the stream context keeps
+        # the copy and execute in stream order while still reusing the
+        # persistent buffers.
         with torch.cuda.stream(self._stream):
             self._input_buf.copy_(torch.from_numpy(inputs_np), non_blocking=True)
         self._context.set_tensor_address(self._input_name, self._input_buf.data_ptr())
 
-        # WR-09: reuse persistent output buffers allocated in _load_engine.
+        # Reuse persistent output buffers allocated in _load_engine.
         for name, out_buf in zip(self._output_names, self._output_bufs, strict=True):
             self._context.set_tensor_address(name, out_buf.data_ptr())
 
@@ -538,7 +538,7 @@ class TensorRTEngine(BaseEngine):
         dataloader : COCODataLoader
             Data loader with COCO val2017 images.
         stage : str
-            Stage identifier string (D-04).
+            Stage identifier string.
         baseline_map_50_95 : float
             FP32 baseline mAP for accuracy drop calculation.
         macs : float | None
