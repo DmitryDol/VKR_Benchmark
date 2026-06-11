@@ -93,7 +93,7 @@ uv run benchmark merge --model rt-detr                                     # о�
 ## Структура проекта
 
 ```text
-VKR_Claude/
+VKR_Benchmark/
 ├── src/benchmark/            # Исходный код пакета (устанавливается как `benchmark`)
 │   ├── cli.py                # Typer CLI: команды `run` и `merge`, реестры моделей/стадий
 │   ├── data/                 # COCODataLoader, маппинги классов COCO-80 ↔ COCO-91
@@ -101,7 +101,7 @@ VKR_Claude/
 │   ├── models/               # Адаптеры моделей (RT-DETR, YOLO, RF-DETR)
 │   ├── eval/                 # Per-class AP и матрицы ошибок
 │   └── utils/                # Логирование результатов, информация о железе, MACs/FLOPs
-├── scripts/                  # Раннеры фаз, экспорт ONNX, генерация графиков и таблиц
+├── scripts/                  # Раннеры пайплайна, экспорт ONNX, генерация графиков и таблиц
 ├── data/                     # download_coco.py + val2017/ + annotations/
 ├── weights/                  # Веса моделей (gitignored)
 ├── engines/                  # Кэш .engine файлов TensorRT (gitignored)
@@ -143,8 +143,6 @@ VKR_Claude/
   (HAWQ-подобный), хранение их в FP16; включается явным флагом `--enable-sensitivity-analysis`.
 - интеграция **D-FINE** и **DEIMv2** (последние две трансформерные модели).
 - пакетная оркестрация всех моделей и единая кросс-модельная отчётность.
-
-Подробности — в [.planning/ROADMAP.md](.planning/ROADMAP.md).
 
 ---
 

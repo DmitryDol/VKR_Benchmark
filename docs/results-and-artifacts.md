@@ -102,9 +102,8 @@ COCO (`person`, `vehicle`, … + `background`), для основного тек
 генераторов на том же `results/`/`cache/` даёт идентичные файлы.
 
 > **Бэкафилл кэша.** Часть артефактов зависит от `cache/predictions/`. Если кэш неполон, выполните
-> один долгий проход `uv run python scripts/build_per_class_ap.py --live` (см.
-> [STATE.md](../.planning/STATE.md) → Operator Next Steps), затем перезапустите генераторы
-> матриц/таблиц/коллажей.
+> один долгий проход `uv run python scripts/build_per_class_ap.py --live`, затем перезапустите
+> генераторы матриц/таблиц/коллажей.
 
 ## См. также
 

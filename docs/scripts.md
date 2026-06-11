@@ -65,7 +65,7 @@ uv run python scripts/export_rfdetr_onnx.py
 
 ### `scripts/run_phase1.py`
 
-End-to-end фаза 1: FP32-базлайн RT-DETR + экспорт ONNX. Пишет `results/results.csv` и `.json`.
+End-to-end раннер: FP32-базлайн RT-DETR + экспорт ONNX. Пишет `results/results.csv` и `.json`.
 Флаги (argparse): `--limit N`, `--skip-onnx`.
 
 ```bash
@@ -98,7 +98,7 @@ uv run python scripts/run_yolo_phase.py --limit 500
 uv run python scripts/verify_yolo.py
 ```
 
-## Генерация артефактов (фаза 13)
+## Генерация артефактов
 
 > Большинство этих скриптов читают `cache/predictions/coco_dt_<model>_<stage>.json`. Если кэш
 > неполон — сначала выполните долгий проход `build_per_class_ap.py --live` (см. ниже), затем
