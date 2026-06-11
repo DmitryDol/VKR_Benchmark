@@ -1,9 +1,7 @@
 # Архитектура
 
 Документ описывает внутреннее устройство пакета [`src/benchmark/`](../src/benchmark/): слои,
-ключевые паттерны проектирования, поток данных через бенчмарк и основные абстракции. Цель —
-дать разработчику карту кода, достаточную, чтобы понять, **где** что лежит и **почему** так
-устроено, а также как безопасно расширять систему.
+ключевые паттерны проектирования, поток данных через бенчмарк и основные абстракции. 
 
 ## Принципы
 
@@ -19,16 +17,16 @@
 
 ```text
 ┌──────────────────────────────────────────────────────────────────────┐
-│  CLI  (src/benchmark/cli.py)                                           │
-│  Typer-приложение: реестры моделей/стадий, оркестрация прогона         │
+│  CLI  (src/benchmark/cli.py)                                         │
+│  Typer-приложение: реестры моделей/стадий, оркестрация прогона       │
 └───────────────┬───────────────────────────────────────┬──────────────┘
-                │                                         │
-        ┌───────▼─────────┐                       ┌───────▼──────────┐
-        │  Engines        │  использует            │  Models          │
+                │                                       │
+        ┌───────▼─────────┐                       ┌─────▼────────────┐
+        │  Engines        │  использует           │  Models          │
         │  (engines/)     │◄──────────────────────│  (models/)       │
-        │  BaseEngine +   │   ModelAdapter         │  RT-DETR / YOLO  │
-        │  PyTorch/ONNX/  │   (Protocol)           │  / RF-DETR       │
-        │  TensorRT       │                        └──────────────────┘
+        │  BaseEngine +   │   ModelAdapter        │  RT-DETR / YOLO  │
+        │  PyTorch/ONNX/  │   (Protocol)          │  / RF-DETR       │
+        │  TensorRT       │                       └──────────────────┘
         └───┬─────────┬───┘
             │         │ пишет
    читает   │         ▼
@@ -46,11 +44,11 @@
 
 ### Data — [`src/benchmark/data/`](../src/benchmark/data/)
 
-- **Назначение:** загрузка и итерация по COCO val2017 строго по одному изображению (batch = 1).
+- **Назначение:** загрузка и итерация по COCO val2017 строго по одному изображению (batch = 1) для имитации потока изображений в реальном времени.
 - **Содержит:** [`COCODataLoader`](../src/benchmark/data/coco_loader.py), value-объекты
   `COCOSample` и `COCOAnnotation`, словари маппинга классов `COCO_91_TO_80` / `COCO_80_TO_91`.
 - **Особенность:** порядок изображений детерминирован — `sorted(coco.getImgIds())[:limit]`,
-  без перемешивания и без seed. Это фундамент воспроизводимости: `COCODataLoader(limit=500)`
+  без перемешивания и без seed. Это сделано для воспроизводимости: `COCODataLoader(limit=500)`
   всегда возвращает одни и те же 500 изображений в одном порядке (используется для INT8-калибровки).
 
 ### Engines — [`src/benchmark/engines/`](../src/benchmark/engines/)
@@ -193,23 +191,23 @@ PyTorch nn.Module ─► export_to_onnx (opset 18, dynamic batch, constant foldi
 
 ## Карта файлов `src/benchmark/`
 
-| Файл | Главные сущности | Роль |
-|------|------------------|------|
-| [`cli.py`](../src/benchmark/cli.py) | `run`, `merge`, `_run_stage`, `MODEL_REGISTRY`, `STAGE_REGISTRY` | Точка входа, оркестрация |
-| [`data/coco_loader.py`](../src/benchmark/data/coco_loader.py) | `COCODataLoader`, `COCOSample`, `COCOAnnotation`, маппинги | Загрузка данных |
-| [`engines/base.py`](../src/benchmark/engines/base.py) | `BaseEngine`, `Detection`, `WARMUP_RUNS`, `MEASURE_RUNS` | Скелет бенчмаркинга |
-| [`engines/pytorch_engine.py`](../src/benchmark/engines/pytorch_engine.py) | `PyTorchEngine`, `ModelAdapter` | Стадия 1 + контракт адаптера |
-| [`engines/onnx_engine.py`](../src/benchmark/engines/onnx_engine.py) | `OnnxRuntimeEngine` | Стадия 2 |
-| [`engines/tensorrt_engine.py`](../src/benchmark/engines/tensorrt_engine.py) | `TensorRTEngine`, `analyze_engine_precision` | Стадии 3–6 |
-| [`engines/onnx_export.py`](../src/benchmark/engines/onnx_export.py) | `export_to_onnx`, `simplify_onnx`, `export_yolo_to_onnx` | Экспорт ONNX |
-| [`engines/int8_calibrators.py`](../src/benchmark/engines/int8_calibrators.py) | `MinMax/Entropy/Percentile`-калибраторы | Стадия 5 |
-| [`engines/mixed_precision.py`](../src/benchmark/engines/mixed_precision.py) | `apply_strategy_a`, `apply_strategy_b` | Стадия 6 |
-| [`models/*_adapter.py`](../src/benchmark/models/) | `RTDETRAdapter`, `YOLOAdapter`, `RFDETRAdapter` | Адаптеры моделей |
-| [`eval/per_class.py`](../src/benchmark/eval/per_class.py) | `compute_per_class_ap_from_results` | Per-class AP |
-| [`eval/confusion.py`](../src/benchmark/eval/confusion.py) | `build_confusion_80`, `aggregate_to_supercat_12` | Матрицы ошибок |
-| [`utils/logger.py`](../src/benchmark/utils/logger.py) | `BenchmarkResult`, `ResultLogger` | Логирование |
-| [`utils/hardware.py`](../src/benchmark/utils/hardware.py) | `HardwareInfo` | Метаданные железа |
-| [`utils/macs.py`](../src/benchmark/utils/macs.py) | `compute_macs` | MACs/FLOPs |
+| Файл                                                                     | Главные сущности                                            | Роль                                           |
+| ---------------------------------------------------------------------------- | -------------------------------------------------------------------------- | -------------------------------------------------- |
+| [`cli.py`](../src/benchmark/cli.py)                                           | `run`, `merge`, `_run_stage`, `MODEL_REGISTRY`, `STAGE_REGISTRY` | Точка входа, оркестрация      |
+| [`data/coco_loader.py`](../src/benchmark/data/coco_loader.py)                 | `COCODataLoader`, `COCOSample`, `COCOAnnotation`, маппинги   | Загрузка данных                      |
+| [`engines/base.py`](../src/benchmark/engines/base.py)                         | `BaseEngine`, `Detection`, `WARMUP_RUNS`, `MEASURE_RUNS`           | Скелет бенчмаркинга              |
+| [`engines/pytorch_engine.py`](../src/benchmark/engines/pytorch_engine.py)     | `PyTorchEngine`, `ModelAdapter`                                        | Стадия 1 + контракт адаптера |
+| [`engines/onnx_engine.py`](../src/benchmark/engines/onnx_engine.py)           | `OnnxRuntimeEngine`                                                      | Стадия 2                                     |
+| [`engines/tensorrt_engine.py`](../src/benchmark/engines/tensorrt_engine.py)   | `TensorRTEngine`, `analyze_engine_precision`                           | Стадии 3–6                                  |
+| [`engines/onnx_export.py`](../src/benchmark/engines/onnx_export.py)           | `export_to_onnx`, `simplify_onnx`, `export_yolo_to_onnx`             | Экспорт ONNX                                |
+| [`engines/int8_calibrators.py`](../src/benchmark/engines/int8_calibrators.py) | `MinMax/Entropy/Percentile`-калибраторы                       | Стадия 5                                     |
+| [`engines/mixed_precision.py`](../src/benchmark/engines/mixed_precision.py)   | `apply_strategy_a`, `apply_strategy_b`                                 | Стадия 6                                     |
+| [`models/*_adapter.py`](../src/benchmark/models/)                             | `RTDETRAdapter`, `YOLOAdapter`, `RFDETRAdapter`                      | Адаптеры моделей                    |
+| [`eval/per_class.py`](../src/benchmark/eval/per_class.py)                     | `compute_per_class_ap_from_results`                                      | Per-class AP                                       |
+| [`eval/confusion.py`](../src/benchmark/eval/confusion.py)                     | `build_confusion_80`, `aggregate_to_supercat_12`                       | Матрицы ошибок                        |
+| [`utils/logger.py`](../src/benchmark/utils/logger.py)                         | `BenchmarkResult`, `ResultLogger`                                      | Логирование                             |
+| [`utils/hardware.py`](../src/benchmark/utils/hardware.py)                     | `HardwareInfo`                                                           | Метаданные железа                  |
+| [`utils/macs.py`](../src/benchmark/utils/macs.py)                             | `compute_macs`                                                           | MACs/FLOPs                                         |
 
 ## См. также
 

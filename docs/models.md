@@ -7,14 +7,12 @@
 
 ## Сводка
 
-| Модель | `--model` | Источник весов | Backbone | Вход | Классы | Постпроцессинг | Семейство¹ | Статус |
-|--------|-----------|----------------|----------|:----:|:------:|----------------|:----------:|:------:|
-| RT-DETR (r50vd) | `rt-detr` | HF `PekingU/rtdetr_r50vd` | ResNet-50 | 640×640 | COCO-80 | sigmoid + порог + per-query argmax | `detr` | ✅ |
-| YOLO11l | `yolo11l` | Ultralytics `.pt` | YOLO11 | 640×640 | COCO-80 | letterbox + NMS (IoU 0.7) | `yolo` | ✅ |
-| YOLO26l | `yolo26l` | Ultralytics `.pt` | YOLO26 | 640×640 | COCO-80 | letterbox + NMS-free (end2end) | `yolo` | ✅ |
-| RF-DETR-L | `rfdetr-l` | `rfdetr.RFDETRLarge` | DINOv2 + LWDETR | 704×704 | COCO-91 | sigmoid + top-k по (queries×classes) | `rfdetr` | ✅² |
-| D-FINE | — | — | — | — | — | — | `detr` | 🔜 |
-| DEIMv2 | — | — | — | — | — | — | `detr` | 🔜 |
+| Модель    | `--model`  | Источник весов | Backbone        | Вход | Классы | Постпроцессинг            | Семейство¹ | Статус |
+| --------------- | ------------ | --------------------------- | --------------- | :------: | :----------: | --------------------------------------- | :------------------: | :----------: |
+| RT-DETR (r50vd) | `rt-detr`  | HF `PekingU/rtdetr_r50vd` | ResNet-50       | 640×640 |   COCO-80   | sigmoid + порог + per-query argmax |       `detr`       |      ✅      |
+| YOLO11l         | `yolo11l`  | Ultralytics `.pt`         | YOLO11          | 640×640 |   COCO-80   | letterbox + NMS (IoU 0.7)               |       `yolo`       |      ✅      |
+| YOLO26l         | `yolo26l`  | Ultralytics `.pt`         | YOLO26          | 640×640 |   COCO-80   | letterbox + NMS-free (end2end)          |       `yolo`       |      ✅      |
+| RF-DETR-L       | `rfdetr-l` | `rfdetr.RFDETRLarge`      | DINOv2 + LWDETR | 704×704 |   COCO-91   | sigmoid + top-k по (queries×classes) |      `rfdetr`      |     ✅²     |
 
 ¹ Семейство определяет способ подсчёта MACs/FLOPs (см. [`utils/macs.py`](../src/benchmark/utils/macs.py)):
 `detr`/`rfdetr` → `calflops`, `yolo` → нативный `model.info()`.
@@ -93,13 +91,9 @@ attention-архитектура + авто-тюнер TRT»), а не ошиб�
 FP16, BF16). Диагностику доли точностей по слоям даёт `analyze_engine_precision`
 ([`tensorrt_engine.py`](../src/benchmark/engines/tensorrt_engine.py)).
 
-## Планируемые модели: D-FINE и DEIMv2
-
-D-FINE и DEIMv2 уже учтены как DETR-семейство в [`utils/macs.py`](../src/benchmark/utils/macs.py) и
-упомянуты в контракте `ModelAdapter`, но **адаптеры ещё не реализованы** — это фаза 10 роадмапа.
-После их добавления корпус достигнет 6 моделей. См. [.planning/ROADMAP.md](../.planning/ROADMAP.md).
-
 ---
+
+
 
 ## Как добавить новую модель
 
